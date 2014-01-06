@@ -1,0 +1,4 @@
+goat
+====
+
+Go Application Template
