@@ -1,4 +1,5 @@
 
-# goat
+# ![goat](https://s3-us-west-2.amazonaws.com/xaevman-git/goat_icon.png)  goat
 
-![goat](http://www.clker.com/cliparts/R/3/0/1/r/S/goat-outline-md.png) Go Application Template
+Go Application Template
+
