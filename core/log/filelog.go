@@ -34,7 +34,7 @@ const (
     INFO_LOG_NAME  = "info.log"
 )
 
-// Module name
+// FileLog module name
 const FL_MOD_NAME = "FileLog"
 
 // InitFileLog creates a new FileLog instance, initializes its members,

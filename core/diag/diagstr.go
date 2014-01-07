@@ -20,7 +20,7 @@ import (
 // AsString aggregates and returns text-based diagnostics information.
 // Diagnostic information includes hostname, CPU count, environment data,
 // stack traces for all running goroutines, and memory allocation statistics.
-func AsString(err error) string {
+func AsString(err interface{}) string {
 	data := New(err)
 
 	return fmt.Sprintf(

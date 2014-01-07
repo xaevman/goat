@@ -16,6 +16,11 @@ package diag
 
 import (
 	"github.com/xaevman/goat/lib/strutil"
+)
+
+// Stdlib imports.
+import (
+	"fmt"
 	"os"
 	"runtime"
 )
@@ -49,7 +54,7 @@ type SysData struct {
 
 // New is a helper function that creates and populates a new DiagData object and
 // returns a pointer to it.
-func New(err error) *DiagData {
+func New(err interface{}) *DiagData {
 	data := new(DiagData)
 
 	// active stacks
@@ -86,7 +91,7 @@ func New(err error) *DiagData {
 		Arch:     runtime.GOARCH,
 		CGOCalls: runtime.NumCgoCall(),
 		CPUCount: runtime.NumCPU(),
-		Error:    err.Error(),
+		Error:    fmt.Sprintf("%v", err),
 		Hostname: hostname,
 		OS:       runtime.GOOS,
 	}

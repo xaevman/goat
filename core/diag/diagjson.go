@@ -19,7 +19,7 @@ import(
 // FmtDiagStr aggregates and returns diagnostics information in json format.
 // Diagnostic information includes hostname, CPU count, environment data,
 // stack traces for all running goroutines, and memory allocation statistics.
-func FmtDiagJson(err error) string {
+func FmtDiagJson(err interface{}) string {
 	data    := New(err)
 	json, _ := json.MarshalIndent(data, "", "    ")
 	

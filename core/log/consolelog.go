@@ -16,7 +16,7 @@ import (
     "fmt"
 )
 
-// Module name
+// ConsoleLog module name
 const CL_MOD_NAME  = "ConsoleLog"
 
 // Initializes a new ConsoleLog and registers it with the log service.
