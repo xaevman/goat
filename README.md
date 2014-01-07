@@ -7,11 +7,5 @@ The goat project (Go Application Template) is a set of Go packages that attempt 
 #### License
 The goat project is release under a BSD-style license, the contents of which are in the repo's LICENSE file.
 
-### Features
-A feature list is coming soon
-
 ### Status
 Just getting started. This project isn't likely to be useful to anyone just yet :)
-
-### API Documentation
-http://godoc.org/github.com/xaevman/goat
