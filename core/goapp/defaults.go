@@ -64,6 +64,11 @@ func (this *DefaultCrashHandler) OnCrash(crashData interface{}) {
 // unless overwridden via SetLoopHandler().
 type DefaultLoopHandler struct {}
 
+// OnHeartbeat logs a debug message to the log service.
+func (this *DefaultLoopHandler) OnHeartbeat() {
+	log.Debug("OnHeartbeat")
+}
+
 // PreLoop logs a debug message to the log service.
 func (this *DefaultLoopHandler) PreLoop() {
 	log.Debug("PreLoop")

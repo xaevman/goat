@@ -26,7 +26,7 @@ func New() *Lifecycle {
 		run: 		   true,
 		heartbeatChan: make(chan bool, 1),
 		heartbeatDur:  time.Duration(0),
-		shutdownChan:  make(chan bool, 1),
+		shutdownChan:  make(chan bool),
 		waitChan:      make(chan bool),
 	}
 
@@ -68,14 +68,14 @@ func (this *Lifecycle) QueryShutdown() <-chan bool {
 func (this *Lifecycle) Shutdown() {
 	this.StopHeart()
 	this.run = false
-	this.shutdownChan<- true
+	close(this.shutdownChan)
 	<-this.waitChan
 }
 
 // ShutdownComplete sends a signal which unblocks the call to Shutdown(). Client
 // code should call this function once its shutdown procedures are completed.
 func (this *Lifecycle) ShutdownComplete() {
-	this.waitChan<- true
+	close(this.waitChan)
 }
 
 // StartHeart sets the heartbeat cycle time in milliseconds and starts

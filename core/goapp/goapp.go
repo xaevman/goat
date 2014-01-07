@@ -74,6 +74,7 @@ type CrashHandler interface {
 // after application initialization and is triggered by the application 
 // heartbeat (if configured), or via manual calls to MsgPump().
 type LoopHandler interface {
+	OnHeartbeat()
 	PreLoop()
 	PostLoop()
 }
@@ -141,9 +142,6 @@ func SetLoopHandler(obj LoopHandler) {
 // Start sets the GoApp's name and starts its execution.
 func Start(name string) {
 	startApp(name)
-
-	// TODO: if service/daemon mode
-	// go startApp(name)
 }
 
 // Stop begins the shutdown process of the application.
@@ -198,6 +196,7 @@ func startApp(name string) {
 		select {
 		case <-msgPump:
 		case <-syncObj.QueryHeartbeat():
+			loopHandler.OnHeartbeat()
 		case <-syncObj.QueryShutdown():
 		}
 
