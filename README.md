@@ -13,10 +13,16 @@ Just getting started. This project isn't likely to be useful to anyone just yet 
 ## API Documentation
 ### core
 [config](http://godoc.org/github.com/xaevman/goat/core/config)
+
 [diag](http://godoc.org/github.com/xaevman/goat/core/diag)
+
 [goapp](http://godoc.org/github.com/xaevman/goat/core/goapp)
+
 [log](http://godoc.org/github.com/xaevman/goat/core/log)
+
 ### lib
 [fsutil](http://godoc.org/github.com/xaevman/goat/lib/fsutil)
+
 [lifecycle](http://godoc.org/github.com/xaevman/goat/lib/lifecycle)
+
 [strutil](http://godoc.org/github.com/xaevman/goat/lib/strutil)
