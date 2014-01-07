@@ -16,7 +16,7 @@ import(
 	"encoding/json"
 )
 
-// AsStr aggregates and returns diagnostics information in json format.
+// AsJson aggregates and returns diagnostics information in json format.
 // Diagnostic information includes hostname, CPU count, environment data,
 // stack traces for all running goroutines, and memory allocation statistics.
 func AsJson(err interface{}) string {
