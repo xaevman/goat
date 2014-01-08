@@ -103,7 +103,7 @@ func Error(format string, v ...interface{}) {
     error <- msg
 }
 
-// GetLogStats returns a copy of the current log statistics.
+// GetLogCounts returns a copy of the current log statistics.
 func GetLogCounts() LogCounts {
     mutex.Lock()
     defer mutex.Unlock()
