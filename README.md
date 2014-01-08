@@ -11,18 +11,16 @@ The goat project is release under a BSD-style license, the contents of which are
 Just getting started. This project isn't likely to be useful to anyone just yet :)
 
 ## API Documentation
-### core
-[config](http://godoc.org/github.com/xaevman/goat/core/config)
+[github.com/xaevman/goat/core/config](http://godoc.org/github.com/xaevman/goat/core/config)
 
-[diag](http://godoc.org/github.com/xaevman/goat/core/diag)
+[github.com/xaevman/goat/core/diag](http://godoc.org/github.com/xaevman/goat/core/diag)
 
-[goapp](http://godoc.org/github.com/xaevman/goat/core/goapp)
+[github.com/xaevman/goat/core/goapp](http://godoc.org/github.com/xaevman/goat/core/goapp)
 
-[log](http://godoc.org/github.com/xaevman/goat/core/log)
+[github.com/xaevman/goat/core/log](http://godoc.org/github.com/xaevman/goat/core/log)
 
-### lib
-[fsutil](http://godoc.org/github.com/xaevman/goat/lib/fsutil)
+[github.com/xaevman/goat/lib/fsutil](http://godoc.org/github.com/xaevman/goat/lib/fsutil)
 
-[lifecycle](http://godoc.org/github.com/xaevman/goat/lib/lifecycle)
+[github.com/xaevman/goat/lib/lifecycle](http://godoc.org/github.com/xaevman/goat/lib/lifecycle)
 
-[strutil](http://godoc.org/github.com/xaevman/goat/lib/strutil)
+[github.com/xaevman/goat/lib/strutil](http://godoc.org/github.com/xaevman/goat/lib/strutil)
