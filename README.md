@@ -19,6 +19,8 @@ Just getting started. This project isn't likely to be useful to anyone just yet 
 
 [github.com/xaevman/goat/core/log](http://godoc.org/github.com/xaevman/goat/core/log)
 
+[github.com/xaevman/goat/core/net](http://godoc.org/github.com/xaevman/goat/core/net)
+
 [github.com/xaevman/goat/lib/fsutil](http://godoc.org/github.com/xaevman/goat/lib/fsutil)
 
 [github.com/xaevman/goat/lib/lifecycle](http://godoc.org/github.com/xaevman/goat/lib/lifecycle)
