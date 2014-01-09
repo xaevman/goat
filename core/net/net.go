@@ -140,3 +140,7 @@ func SetMsgSize(size int, msgData []byte) {
 	msgData[2] = byte(size >> 8)
 	msgData[3] = byte(size)
 }
+
+func ValidateMsgHeader(msgData []byte) bool {
+	return len(msgData) > 3
+}

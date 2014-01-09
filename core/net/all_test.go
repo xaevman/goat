@@ -18,10 +18,10 @@ import (
 )
 
 import(
-//	"math/rand"
-//	"net"
+	"math/rand"
+	"net"
 	"testing"
-//	"time"
+	"time"
 )
 
 var data []byte
@@ -70,8 +70,10 @@ func testHeaders(i uint16, t *testing.T) {
 	rtHeader  := GetMsgHeader(buffer)
 	rtMsgType := GetMsgSig(rtHeader)
 
+	if !ValidateMsgHeader(buffer) {
+		t.Fatalf("Buffer failed header validation", buffer)
+	}
 	if rtHeader != header {
-		log.Info("% x", rtHeader)
 		t.Fatalf("Roundtrip header: %v != %v\n", rtHeader, header)
 	}
 	if rtMsgType != msgType {
@@ -95,11 +97,13 @@ func testHeaders(i uint16, t *testing.T) {
 	log.Info("TestHeaderOps[%v]: passed", i)
 }
 
-/*
-func TestTCPSrv(t *testing.T) {
-	data = make([]byte, 32 * 1024)
 
-	fillData()
+func TestTCPSrv(t *testing.T) {
+	msg    := "test msg"
+	header := uint16(25)
+	data    = make([]byte, len(msg) + 4)
+	SetMsgHeader(header, data)
+	SetMsgPayload([]byte(msg), data)
 
 	srv := NewTCPSrv()
 	go srv.Start("127.0.0.1:6600")
@@ -107,7 +111,7 @@ func TestTCPSrv(t *testing.T) {
 	<-time.After(1 * time.Second)
 
 	for i := 0; i < 100; i++ {
-		<-time.After(time.Duration(rand.Intn(200)) * time.Millisecond)
+		<-time.After(time.Duration(rand.Intn(100)) * time.Millisecond)
 		go runClient(t)
 	}
 
@@ -115,11 +119,6 @@ func TestTCPSrv(t *testing.T) {
 	srv.Stop()
 }
 
-func fillData() {
-	for i := 0; i < len(data); i++ {
-		data[i] = byte(rand.Intn(100))
-	}
-}
 
 func runClient(t *testing.T) {
 	conn, err := net.Dial("tcp", "127.0.0.1:6600")
@@ -128,9 +127,7 @@ func runClient(t *testing.T) {
 	}
 
 	for i := 0; i < 1000; i++ {
-		conn.Write([]byte(data)[:rand.Intn(32 * 1024)])
-
+		conn.Write(data)
 		<-time.After(time.Duration(rand.Intn(15)) * time.Millisecond)
 	}
 }
-*/
