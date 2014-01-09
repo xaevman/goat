@@ -29,11 +29,10 @@ import (
 // and returns a pointer to it for use.
 func NewTCPSrv() *TCPSrv {
 	srv := TCPSrv {
-		acceptChan: make(chan *remoteCli, 1),
-		discoChan:  make(chan *remoteCli, 1),
-		cliMap:     make(map[uint64]*remoteCli, 0),
-		id:         atomic.AddUint64(&netId, 1),
-		readChan:   make(chan *RawMsg, 1),
+		acceptChan: make(chan *tcpCli, 1),
+		discoChan:  make(chan *tcpCli, 1),
+		cliMap:     make(map[uint32]*tcpCli, 0),
+		id:         atomic.AddUint32(&netId, 1),
 		syncObj:    lifecycle.New(),
 	}
 
@@ -42,13 +41,12 @@ func NewTCPSrv() *TCPSrv {
 
 
 type TCPSrv struct {
-	acceptChan chan *remoteCli
-	discoChan  chan *remoteCli
-	cliMap     map[uint64]*remoteCli
-	id         uint64
+	acceptChan chan *tcpCli
+	discoChan  chan *tcpCli
+	cliMap     map[uint32]*tcpCli
+	id         uint32
 	listener   net.Listener
-	mutex      sync.Mutex
-	readChan   chan *RawMsg
+	mutex      sync.RWMutex
 	syncObj    *lifecycle.Lifecycle
 }
 
@@ -69,12 +67,6 @@ func (this *TCPSrv) Start(addr string) {
 			this.handleConnect(newCli)
 		case discoCli := <-this.discoChan:
 			this.handleDisco(discoCli)
-		case newMsg   := <-this.readChan:
-			log.Info(
-				"[cli %v] msg len %v", 
-				newMsg.cli.id, 
-				len(newMsg.data),
-			)
 		case <-this.syncObj.QueryShutdown():
 			log.Info("Shutting down %v", addr)
 		}
@@ -102,12 +94,11 @@ func (this *TCPSrv) acceptConnections() {
 			continue
 		}
 
-		cli := remoteCli{
+		cli := tcpCli{
 			con:       cliCon.(*net.TCPConn),
-			id:        atomic.AddUint64(&netId, 1),
+			id:        atomic.AddUint32(&netId, 1),
 			readChan:  make(chan []byte, 1),
 			srvDisco:  this.discoChan,
-			srvRead:   this.readChan,
 			syncObj:   lifecycle.New(),
 			writeChan: make(chan []byte, 1),
 		}
@@ -116,7 +107,7 @@ func (this *TCPSrv) acceptConnections() {
 	}
 }
 
-func (this *TCPSrv) handleConnect(cli *remoteCli) {
+func (this *TCPSrv) handleConnect(cli *tcpCli) {
 	this.mutex.Lock()
 	this.cliMap[cli.id] = cli
 	this.mutex.Unlock()
@@ -130,7 +121,7 @@ func (this *TCPSrv) handleConnect(cli *remoteCli) {
 	cli.startHandlers()
 }
 
-func (this *TCPSrv) handleDisco(cli *remoteCli) {
+func (this *TCPSrv) handleDisco(cli *tcpCli) {
 	this.mutex.Lock()
 	delete(this.cliMap, cli.id)
 	this.mutex.Unlock()
@@ -143,21 +134,20 @@ func (this *TCPSrv) handleDisco(cli *remoteCli) {
 }
 
 
-type remoteCli struct {
-	id        uint64
+type tcpCli struct {
+	id        uint32
 	con       *net.TCPConn
 	readChan  chan []byte
-	srvDisco  chan *remoteCli
-	srvRead   chan *RawMsg
+	srvDisco  chan *tcpCli
 	syncObj   *lifecycle.Lifecycle
 	writeChan chan []byte
 }
 
-func (this *remoteCli) close() {
+func (this *tcpCli) close() {
 	this.con.Close()
 }
 
-func (this *remoteCli) handleReads() {
+func (this *tcpCli) handleReads() {
 	var count int
 	var err   error
 	
@@ -182,7 +172,7 @@ func (this *remoteCli) handleReads() {
 	}
 }
 
-func (this *remoteCli) handleWrites() {
+func (this *tcpCli) handleWrites() {
 	var count int
 	var err   error
 
@@ -204,15 +194,10 @@ func (this *remoteCli) handleWrites() {
 	}
 }
 
-func (this *remoteCli) runCli() {
+func (this *tcpCli) runCli() {
 	for this.syncObj.QueryRun() {
 		select {
-		case data := <-this.readChan:
-			msg := RawMsg {
-				cli:  this,
-				data: data,
-			}
-			this.srvRead<- &msg
+		case <-this.readChan:
 		case <-this.syncObj.QueryShutdown():
 		}
 	}
@@ -222,7 +207,7 @@ func (this *remoteCli) runCli() {
 	this.syncObj.ShutdownComplete()
 }
 
-func (this *remoteCli) sendDisco() {
+func (this *tcpCli) sendDisco() {
 	this.syncObj.Shutdown()
 
 	if this.srvDisco != nil {
@@ -230,12 +215,12 @@ func (this *remoteCli) sendDisco() {
 	}
 }
 
-func (this *remoteCli) startHandlers() {
+func (this *tcpCli) startHandlers() {
 	go this.runCli()
 	go this.handleReads()
 	go this.handleWrites()
 }
 
-func (this *remoteCli) writeData(data []byte) {
+func (this *tcpCli) writeData(data []byte) {
 	this.writeChan<- data
 }
