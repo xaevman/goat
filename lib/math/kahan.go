@@ -12,6 +12,10 @@
 
 package math
 
+import (
+	"sync"
+)
+
 //function KahanSum(input)
 //    var sum = 0.0
 //    var c = 0.0                  	// A running compensation for lost low-order bits.
@@ -24,10 +28,14 @@ package math
 //    return sum
 type KahanSum struct {
 	compensation float64
+	mutex        sync.Mutex
 	sum        	 float64
 }
 
 func (this *KahanSum) Add(val float64) float64 {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
 	y := val - this.compensation
 	t := this.sum + y
 	this.compensation = (t - this.sum) - y
@@ -37,10 +45,16 @@ func (this *KahanSum) Add(val float64) float64 {
 }
 
 func (this *KahanSum) Reset() {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
 	this.compensation = 0
 	this.sum          = 0
 }
 
 func (this *KahanSum) Sum() float64 {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
 	return this.sum
 }
