@@ -115,7 +115,7 @@ func TestTCPSrv(t *testing.T) {
 		go runClient(t)
 	}
 
-	<-time.After(15 * time.Second)
+	<-time.After(5 * time.Second)
 	srv.Stop()
 }
 

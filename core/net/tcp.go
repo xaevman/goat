@@ -25,6 +25,18 @@ import (
 	"sync/atomic"
 )
 
+
+
+type TCPSrv struct {
+	acceptChan chan *tcpCli
+	discoChan  chan *tcpCli
+	cliMap     map[uint32]*tcpCli
+	id         uint32
+	listener   net.Listener
+	mutex      sync.RWMutex
+	syncObj    *lifecycle.Lifecycle
+}
+
 // NewTCPSrv is a helper function which initializes a new TCPSrv instance
 // and returns a pointer to it for use.
 func NewTCPSrv() *TCPSrv {
@@ -37,17 +49,6 @@ func NewTCPSrv() *TCPSrv {
 	}
 
 	return &srv
-}
-
-
-type TCPSrv struct {
-	acceptChan chan *tcpCli
-	discoChan  chan *tcpCli
-	cliMap     map[uint32]*tcpCli
-	id         uint32
-	listener   net.Listener
-	mutex      sync.RWMutex
-	syncObj    *lifecycle.Lifecycle
 }
 
 func (this *TCPSrv) Start(addr string) {
@@ -151,7 +152,7 @@ func (this *NetMsg) addData(msgData []byte) ([]byte, bool) {
 		return msgData[count:], true
 	}
 
-	if this.cursor == len(msgData) {
+	if this.cursor == len(this.data) {
 		return nil, true
 	}
 
@@ -225,14 +226,14 @@ func (this *tcpCli) handleReads() {
 			return
 		}
 
+		// received data
+		this.readChan<- buffer[:count]
+
 		// a real error
 		if err != nil {
 			log.Error("%v", err)
 			continue
 		}
-
-		// received data
-		this.readChan<- buffer[:count]
 	}
 }
 
