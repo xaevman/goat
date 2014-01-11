@@ -16,8 +16,10 @@ package strutil
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 )
+
 
 // DelimToStrArray takes a data string, delimited by a specified separator,
 // and splits the string by that separator, also trimming whitespace and
@@ -34,6 +36,21 @@ func DelimToStrArray(data, sep string) []string {
 	}
 
 	return temp
+}
+
+// IntArrayToList takes an array of ints and transforms them into a 
+// single string, delimited by a specified separator.
+func IntArrayToList(items []int, sep string) string {
+	var buffer bytes.Buffer
+
+	for i, v := range items {
+		buffer.WriteString(strings.TrimSpace(strconv.Itoa(v)))
+		if i < len(items) - 1 {
+			buffer.WriteString(sep)
+		}
+	}
+
+	return buffer.String()
 }
 
 // StrArrayToCsv is a helper function that calls StrArrayToList 

@@ -10,6 +10,9 @@
 //
 //  -----------
 
+// Package math includes helper objects for some commonly useful
+// situations, such as improving floating point summation accuracy,
+// and statistical counter objects.
 package math
 
 import (
@@ -17,31 +20,35 @@ import (
 	"sync"
 )
 
-type RunningStats struct {
-	cursor   byte
-	max      int
-	mean     float64
-	min      int
-	mutex    sync.Mutex
-	stale    bool
-	stdDev   float64
-	vals     [256]int
-	variance float64
+// The number of samples stored and used to calculate statistics
+// in a given Stat object.
+const STAT_SAMPLES = 100
+
+// Stat represents a series of values and some common statistical values
+// associated with that set.
+type Stat struct {
+	cursor    int
+	max       int
+	maxCursor int
+	mean      float64
+	min       int
+	mutex     sync.Mutex
+	stale     bool
+	stdDev    float64
+	vals      [STAT_SAMPLES]int
+	variance  float64
 }
 
-func NewStats(initialSample int) *RunningStats {
-	stats := new(RunningStats)
+// MaxCount returns the total number of items in the set.
+func (this *Stat) Len() int {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
 
-	for i := 0; i < len(stats.vals); i++ {
-		stats.vals[i] = initialSample
-	}
-
-	stats.NextVal(initialSample)
-
-	return stats
+	return this.maxCursor
 }
 
-func (this *RunningStats) Max() int {
+// Max returns the largest of all values in the set.
+func (this *Stat) Max() int {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
@@ -52,7 +59,8 @@ func (this *RunningStats) Max() int {
 	return this.max
 }
 
-func (this *RunningStats) Mean() float64 {
+// Mean returns the mean (simple average) across all values in the set.
+func (this *Stat) Mean() float64 {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
@@ -63,7 +71,8 @@ func (this *RunningStats) Mean() float64 {
 	return this.mean
 }
 
-func (this *RunningStats) Min() int {
+// Min returns the smallest of all values in the set.
+func (this *Stat) Min() int {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
@@ -74,16 +83,28 @@ func (this *RunningStats) Min() int {
 	return this.min
 }
 
-func (this *RunningStats) NextVal(val int) {
+// NextVal adds a new value to the next slot in the set. Older values
+// are overwritten in the order that they were added.
+func (this *Stat) NextVal(val int) {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
 	this.vals[this.cursor] = val	
 	this.stale             = true
-	this.cursor++
+
+	if this.cursor < len(this.vals) - 1 {
+		this.cursor++
+	} else {
+		this.cursor = 0
+	}
+
+	if this.maxCursor < len(this.vals) {
+		this.maxCursor++
+	}
 }
 
-func (this *RunningStats) StdDev() float64 {
+// StdDev returns the standard deviation across all values in the set.
+func (this *Stat) StdDev() float64 {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
@@ -94,7 +115,8 @@ func (this *RunningStats) StdDev() float64 {
 	return this.stdDev
 }
 
-func (this *RunningStats) Variance() float64 {
+// Variance returns the population variance across all values in the set.
+func (this *Stat) Variance() float64 {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
@@ -105,13 +127,12 @@ func (this *RunningStats) Variance() float64 {
 	return this.variance
 }
 
-func (this *RunningStats) recalc() {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
-
+// recalc traverses the set of values and recomputes the min, max, mean, 
+// variance and standard deviation.
+func (this *Stat) recalc() {
 	var total int
 
-	for i := 0; i < len(this.vals); i++ {
+	for i := 0; i < this.maxCursor; i++ {
 		total += this.vals[i]
 
 		if this.vals[i] > this.max {
@@ -123,17 +144,17 @@ func (this *RunningStats) recalc() {
 		}
 	}
 
-	this.mean = float64(total) / float64(len(this.vals))
+	this.mean = float64(total) / float64(this.maxCursor)
 
-	var diff   [256]float64
+	var diff   [STAT_SAMPLES]float64
 	var ftotal float64
 
-	for i := 0; i < len(this.vals); i++ {
+	for i := 0; i < this.maxCursor; i++ {
 		diff[i] = math.Pow(float64(this.vals[i]) - this.mean, 2)
 		ftotal += diff[i]
 	}
 
-	this.variance = ftotal / float64(len(this.vals))
+	this.variance = ftotal / float64(this.maxCursor)
 	this.stdDev   = math.Sqrt(this.variance)
 
 	this.stale = false
