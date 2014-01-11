@@ -116,7 +116,7 @@ func (this *Stat) StdDev() float64 {
 	return this.stdDev
 }
 
-// Variance returns the population variance across all values in the set.
+// Variance returns the variance across all values in the set.
 func (this *Stat) Variance() float64 {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()

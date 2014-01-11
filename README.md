@@ -25,4 +25,6 @@ Just getting started. This project isn't likely to be useful to anyone just yet 
 
 [github.com/xaevman/goat/lib/lifecycle](http://godoc.org/github.com/xaevman/goat/lib/lifecycle)
 
+[github.com/xaevman/goat/lib/math](http://godoc.org/github.com/xaevman/goat/lib/math)
+
 [github.com/xaevman/goat/lib/strutil](http://godoc.org/github.com/xaevman/goat/lib/strutil)
