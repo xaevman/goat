@@ -12,6 +12,7 @@
 
 package math
 
+// Stdlib imports.
 import (
 	"sync"
 )
@@ -24,6 +25,18 @@ type KahanSum struct {
 	mutex        sync.Mutex
 	sum        	 float64
 }
+
+/* function KahanSum(input)
+    var sum = 0.0
+    var c = 0.0                  // A running compensation for lost low-order bits.
+    for i = 1 to input.length do
+        var y = input[i] - c     // So far, so good: c is zero.
+        var t = sum + y          // Alas, sum is big, y small, so low-order digits of y are lost.
+        c = (t - sum) - y // (t - sum) recovers the high-order part of y; subtracting y recovers -(low part of y)
+        sum = t           // Algebraically, c should always be zero. Beware overly-aggressive optimizing compilers!
+        // Next time around, the lost low part will be added to y in a fresh attempt.
+    return sum 
+*/
 
 // Add sums the previous and supplied values together using Kahan's sum algorithm
 // and returns the resulting new sum.

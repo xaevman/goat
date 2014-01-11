@@ -15,6 +15,7 @@
 // and statistical counter objects.
 package math
 
+// Stdlib imports.
 import (
 	"math"
 	"sync"
@@ -154,7 +155,7 @@ func (this *Stat) recalc() {
 		ftotal += diff[i]
 	}
 
-	this.variance = ftotal / float64(this.maxCursor)
+	this.variance = ftotal / float64(this.maxCursor - 1)
 	this.stdDev   = math.Sqrt(this.variance)
 
 	this.stale = false
