@@ -10,6 +10,10 @@
 //
 //  -----------
 
+// Package net provides abstractions for TCP servers and clients
+// which handle massively parallel IO and present a unified interface
+// for implementing security and messaging protocols on top of them.
+//  
 // Network message (max length 32KB)
 //		flags 
 //			11: compressed
@@ -54,7 +58,7 @@ var netId uint32
 // Routing map and synchronization.
 var (
 	routeMutex sync.RWMutex	
-	routeMap   map[uint16]*TcpProtocol
+	routeMap   = make(map[uint16]*TcpProtocol)
 )
 
 // CompressionProvider specifies the interface which network protocols will
@@ -62,8 +66,10 @@ var (
 // through Compress(). Only messages received with the compression header bit
 // set will flow through Decompress().
 type CompressionProvider interface {
+	Close()
 	Compress(msg *NetMsg) error
 	Decompress(msg *NetMsg) error
+	Init() 
 }
 
 // CryptoProvider specifies the interface which network protocols will use
@@ -71,8 +77,10 @@ type CompressionProvider interface {
 // through Encrypt(). Only messages received with the encrypted header bit
 // set will flow through Decrypt().
 type CryptoProvider interface {
+	Close()
 	Decrypt(msg *NetMsg) error
 	Encrypt(msg *NetMsg) error
+	Init()
 }
 
 // AccessProvider specifies the interface which network protocols will use
@@ -81,14 +89,18 @@ type CryptoProvider interface {
 // false.
 type AccessProvider interface {
 	Authorize(msg *NetMsg) (bool, error)
+	Close()
+	Init()
 }
 
 // MsgProcessor specifies the entry and exit points of the network system which
 // network protcols use to accept and distribute incoming messages as well as
 // accept and disseminate outgoing messages to the correct endpoints.
 type MsgProcessor interface {
+	Close()
+	Init()
 	ProcessMsg(msg *NetMsg) error
-	SendMsg(id uint32, msg *NetMsg)
+	SendMsg(id uint32, msg *NetMsg) error
 }
 
 // GetMsgCompressedFlag retrieves bit 11 of the message header, which is used
@@ -181,8 +193,8 @@ func SetMsgHeader(header uint16, msgData []byte) {
 		panic("msgData buffer less than 2 bytes")
 	}
 
-	msgData[0] = byte(header >> 8) 
-	msgData[1] = byte(header) 
+	msgData[0] = byte(header >> 8)
+	msgData[1] = byte(header)
 }
 
 // SetMsgPayload takes the supplied message payload, sets the message size

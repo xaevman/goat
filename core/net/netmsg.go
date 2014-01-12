@@ -15,7 +15,6 @@ package net
 // NetMsg represents the baseline structure of data used for packaging
 // network messages to be sent via the net service.
 type NetMsg struct {
-	chunks int
 	cli    *tcpCli
 	cursor int
 	data   []byte
@@ -33,11 +32,20 @@ func NewNetMsg(header uint16, payload []byte) *NetMsg {
 	return &newMsg
 }
 
+// GetHeader retrieves the header portion of the NetMsg object.
+func (this *NetMsg) GetHeader() uint16 {
+	return this.header
+}
+
+// GetPayload retrieves the payload portion of the NetMsg object.
+func (this *NetMsg) GetPayload() []byte {
+	return this.data
+}
+
 // addData takes bytes off of the line and adds them into the data buffer.
 // Once the data buffer is full, any remnants are returned (because they are
 // a part of the next message coming in the stream).
 func (this *NetMsg) addData(msgData []byte) ([]byte, bool) {
-	this.chunks++
 	count := copy(this.data[this.cursor:], msgData)
 	this.cursor += count
 
