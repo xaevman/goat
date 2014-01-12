@@ -26,7 +26,6 @@ import (
 )
 
 
-
 type TCPSrv struct {
 	acceptChan chan *tcpCli
 	discoChan  chan *tcpCli
@@ -136,30 +135,6 @@ func (this *TCPSrv) handleDisco(cli *tcpCli) {
 }
 
 
-type NetMsg struct {
-	chunks int
-	cursor int
-	data   []byte
-	header uint16
-}
-
-func (this *NetMsg) addData(msgData []byte) ([]byte, bool) {
-	this.chunks++
-	count := copy(this.data[this.cursor:], msgData)
-	this.cursor += count
-
-	if count < len(msgData) {
-		return msgData[count:], true
-	}
-
-	if this.cursor == len(this.data) {
-		return nil, true
-	}
-
-	return nil, false
-}
-
-
 type tcpCli struct {
 	id        uint32
 	con       *net.TCPConn
@@ -180,13 +155,14 @@ func (this *tcpCli) buildMsg(msgData []byte) []byte {
 		// search for a good header
 		if !ValidateMsgHeader(msgData) {
 			if len(msgData) > 7 {
-				return msgData[4:]
+				return msgData[1:]
 			}
 		}
 
-		// start msg for this message
+		// start msg object for this message
 		size        := GetMsgSize(msgData)
 		this.nextMsg = &NetMsg {
+			cli:    this,
 			data:   make([]byte, size),
 			header: GetMsgHeader(msgData),
 		}
@@ -196,8 +172,7 @@ func (this *tcpCli) buildMsg(msgData []byte) []byte {
 	leftovers, complete := this.nextMsg.addData(msgData[4:])
 	if complete {
 		// dispatch message
-		sig := GetMsgSig(this.nextMsg.header)
-		log.Info("%v :: %v", sig, string(this.nextMsg.data))
+		routeMsg(this.nextMsg)
 		this.nextMsg = nil
 	}
 
