@@ -116,6 +116,17 @@ func GetMsgHeader(msgData []byte) uint16 {
 	return header
 }
 
+// GetMsgPayload returns the payload portion of a raw message buffer.
+func GetMsgPayload(msgData []byte) []byte {
+  	if len(msgData) < 4 {
+     	panic("msgData buffer less than 2 bytes")
+   	}
+
+   	size := GetMsgSize(msgData)
+ 
+   	return msgData[4:size + 4]
+ }
+
 // GetMsgSig retrieves the message type signature out of a raw message header.
 func GetMsgSig(header uint16) uint16 {
 	sig := header &^ msgTypeMask
