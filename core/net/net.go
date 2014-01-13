@@ -28,8 +28,14 @@
 // [4-32767] payload is msg size - 2
 package net
 
+// External imports.
+import(
+	"github.com/xaevman/goat/core/log"
+)
+
 // Stdlib imports.
 import (
+	"net"
 	"sync"
 )
 
@@ -52,14 +58,26 @@ const (
 	msgFlagsMask = 0x03FF
 )
 
-// Network id pool.
-var netId uint32
+// Network id pool. First 50 Ids are reserved for well-known network
+// group objects.
+var netId uint32 = 50
 
 // Routing map and synchronization.
 var (
+	protoMap   = make(map[string]*Protocol)
 	routeMutex sync.RWMutex	
-	routeMap   = make(map[uint16]*TcpProtocol)
+	sigMap     = make(map[uint16]*Protocol)
 )
+
+// AccessProvider specifies the interface which network protocols will use
+// to authorize messages for sending or processing. All incoming and outgoing
+// messages flow through Authorize() and are immediately dropped if it returns
+// false.
+type AccessProvider interface {
+	Authorize(con Connection) (byte, error)
+	Close()
+	Init()
+}
 
 // CompressionProvider specifies the interface which network protocols will
 // use to compress/decompress network messages. All outgoing messages flow
@@ -70,6 +88,17 @@ type CompressionProvider interface {
 	Compress(msg *NetMsg) error
 	Decompress(msg *NetMsg) error
 	Init() 
+}
+
+// Connection specifies the common interface that is used by AccessProvider
+// objects to provide authentication for network objects. A given AccessProvider
+// may validate based on none, one, or many pieces of the exposed data.
+type Connection interface {
+	Close()
+	Id() uint32
+	Key() string
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
 }
 
 // CryptoProvider specifies the interface which network protocols will use
@@ -83,24 +112,14 @@ type CryptoProvider interface {
 	Init()
 }
 
-// AccessProvider specifies the interface which network protocols will use
-// to authorize messages for sending or processing. All incoming and outgoing
-// messages flow through Authorize() and are immediately dropped if it returns
-// false.
-type AccessProvider interface {
-	Authorize(msg *NetMsg) (bool, error)
-	Close()
-	Init()
-}
-
 // MsgProcessor specifies the entry and exit points of the network system which
 // network protcols use to accept and distribute incoming messages as well as
 // accept and disseminate outgoing messages to the correct endpoints.
 type MsgProcessor interface {
 	Close()
 	Init()
-	ProcessMsg(msg *NetMsg) error
-	SendMsg(id uint32, msg *NetMsg) error
+	ProcessMsg(msg *NetMsg, access byte) error
+	SendMsg(id uint32, msg *NetMsg, access byte) error
 }
 
 // GetMsgCompressedFlag retrieves bit 11 of the message header, which is used
@@ -157,15 +176,6 @@ func GetMsgSize(msgData []byte) uint16 {
 	return size
 }
 
-// RegisterTcpProtocol registers and maps a message type signature to a
-// TcpProtocol which will be used to process messages of that type.
-func RegisterTcpProtocol(sig uint16, proto *TcpProtocol) {
-	routeMutex.Lock()
-	defer routeMutex.Unlock()
-
-	routeMap[sig] = proto
-}
-
 // SetMsgCompressedFlag sets bit 11 of a raw header object, which is used to
 // specify whether the following data block is compressed or not.
 func SetMsgCompressedFlag(header *uint16, val bool) {
@@ -214,21 +224,50 @@ func SetMsgSize(size int, msgData []byte) {
 	msgData[3] = byte(size)
 }
 
-// UnregisterTcpProtocol removes a mapping between a message type signature
-// and the supplied TcpProtocol if such a mapping exists.
-func UnregisterTcpProtocol(sig uint16, proto *TcpProtocol) {
-	routeMutex.Lock()
-	defer routeMutex.Unlock()
-
-	if routeMap[sig] == proto {
-		delete(routeMap, sig)
-	}
-}
-
 // ValidateMsgHeader does some simple validation of the header in a raw
 // data buffer.
 func ValidateMsgHeader(msgData []byte) bool {
 	return len(msgData) > 3
+}
+
+// onConnect is called by appropriate, connection-based client and server 
+// objects to notify Protocols of clients coming into, and exiting, the system.
+func onConnect(con Connection) {
+	addr, _, _ := net.SplitHostPort(con.RemoteAddr().String())
+
+	log.Debug(
+		"%v[%v]->%v connected", 
+		addr,
+		con.Id(),
+		con.LocalAddr(),
+	)
+
+	routeMutex.RLock()
+	defer routeMutex.RUnlock()
+
+	for _, proto := range protoMap {
+		proto.onConnect(con)
+	}
+}
+
+// onDisconnect is called by appropriate, connection-based client and server
+// objects to notify Protocols of clients coming into, and exiting, the system.
+func onDisconnect(con Connection) {
+	addr, _, _ := net.SplitHostPort(con.RemoteAddr().String())
+
+	log.Debug(
+		"%v[%v]->%v disconnected",
+		addr,
+		con.Id(),
+		con.LocalAddr(),
+	)
+
+	routeMutex.RLock()
+	defer routeMutex.RUnlock()
+
+	for _, proto := range protoMap {
+		proto.onDisconnect(con)
+	}
 }
 
 // routeMsg takes an incoming NetMsg and routes it to the appropriate protocol
@@ -239,7 +278,7 @@ func routeMsg(msg *NetMsg) {
 	routeMutex.RLock()
 	defer routeMutex.RUnlock()
 
-	proto := routeMap[sig]
+	proto := sigMap  [sig]
 	if proto == nil {
 		return
 	}
@@ -247,3 +286,95 @@ func routeMsg(msg *NetMsg) {
 	proto.rcvMsg(msg)
 }
 
+// registerProtocol registers a new Protocol object with the net service.
+// This is done automatically when a new Protocol object is created.
+func registerProtocol(proto *Protocol) {
+	routeMutex.Lock()
+	defer routeMutex.Unlock()
+
+	if protoMap[proto.name] != nil {
+		log.Error(
+			"Protocol %v already registered. Aborting registration", 
+			proto.name,
+		)
+		return
+	}
+
+	protoMap[proto.name] = proto
+
+	log.Info("Protocol %v registered", proto.name)
+}
+
+// registerSignature registers and maps a message type signature to a
+// Protocol which will be used to process messages of that type.
+func registerSignature(sig uint16, proto *Protocol) {
+	routeMutex.Lock()
+	defer routeMutex.Unlock()
+
+	if protoMap[proto.name] == nil {
+		log.Error(
+			"Cannot register a Signature for an " +
+			"unregistered Protocol (sig: %v, proto: %v)",
+			sig,
+			proto.name,
+		)
+
+		return
+	}
+
+	if protoMap[proto.name] != proto {
+		log.Error(
+			"Error registering Signature: Specified protocol name " +
+			"is already registered, but with a different object " + 
+			"(sig: %v, proto: %v)",
+			sig,
+			proto.name,
+		)
+
+		return
+	}
+
+	if sigMap[sig] != nil {
+		log.Error(
+			"Signature %v already registered. Aborting registration",
+			sig,
+		)
+
+		return
+	}
+
+	sigMap[sig] = proto
+
+	log.Info("Proto %v, Sig %v registered", proto.name, sig)
+}
+
+// unregisterProtocol removes a registered protocol from the net service and
+// also unregisters any related message type signatures.
+func unregisterProtocol(proto *Protocol) {
+	routeMutex.Lock()
+	defer routeMutex.Unlock()
+
+	if protoMap[proto.name] == proto {
+		delete(protoMap, proto.name)
+		log.Info("Protocol %v unregistered", proto.name)
+	}
+
+	for k, v := range sigMap {
+		if v == proto {
+			delete(sigMap, k)
+			log.Info("Proto %v, Sig %v unregistered", proto.name, k)
+		}
+	}
+}
+
+// unregisterSignature removes a mapping between a message type signature
+// and the supplied Protocol if such a mapping exists.
+func unregisterSignature(sig uint16, proto *Protocol) {
+	routeMutex.Lock()
+	defer routeMutex.Unlock()
+
+	if sigMap[sig] == proto {
+		delete(sigMap, sig)
+		log.Info("Proto %v, Sig %v unregistered", proto.name, sig)
+	}
+}

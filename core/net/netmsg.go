@@ -15,7 +15,7 @@ package net
 // NetMsg represents the baseline structure of data used for packaging
 // network messages to be sent via the net service.
 type NetMsg struct {
-	cli    *tcpCli
+	con    Connection
 	cursor int
 	data   []byte
 	header uint16

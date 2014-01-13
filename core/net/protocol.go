@@ -22,58 +22,61 @@ import (
 	"sync"
 )
 
-// TcpProtocol represents a collection of related Tcp clients, message type
+// Protocol represents a collection of related clients, message type
 // signatures, and the message processing, access, crypto, and compression
 // providers which will be used as a part of the messaging pipeline for those
 // message types.
-type TcpProtocol struct {
-	cliMap     map[uint32]*tcpCli
+type Protocol struct {
+	cliMap     map[uint32]Connection
+	cliMutex   sync.RWMutex
 	compressor CompressionProvider
 	crypto     CryptoProvider
-	cliMutex   sync.RWMutex
 	name       string
 	objMutex   sync.RWMutex
 	security   AccessProvider
 	sigMap     map[uint16]MsgProcessor
 }
 
-// NewTcpProtocol is a helper constructor function which returns a pointer to a
-// new TcpProtocol object.
-func NewTcpProtocol(pName string) *TcpProtocol {
-	newProto := TcpProtocol {
-		cliMap:   make(map[uint32]*tcpCli, 0),
+// NewProtocol is a helper constructor function which creates a newly initialized
+// Protocol object, registers it with the net service, and returns a pointer to it
+// for use.
+func NewProtocol(pName string) *Protocol {
+	newProto := Protocol {
+		cliMap:   make(map[uint32]Connection, 0),
 		name:     pName,
 		sigMap:   make(map[uint16]MsgProcessor, 0),
 	}
+
+	registerProtocol(&newProto)
 
 	return &newProto
 }
 
 // AddSig registers a message type signature and its associated message processing
 // object with this protocol.
-func (this *TcpProtocol) AddSig(sig uint16, proc MsgProcessor) {
+func (this *Protocol) AddSignature(sig uint16, proc MsgProcessor) {
 	this.objMutex.Lock()
 	this.sigMap[sig] = proc
 	this.objMutex.Unlock()
 
-	RegisterTcpProtocol(sig, this)
+	registerSignature(sig, this)
 }
 
 // DeleteSig removes a message type signature and its associated message processing
 // object if one exists.
-func (this *TcpProtocol) DeleteSig(sig uint16, proc MsgProcessor) {
+func (this *Protocol) DeleteSignature(sig uint16, proc MsgProcessor) {
 	this.objMutex.Lock()
 	if this.sigMap[sig] == proc {
 		delete(this.sigMap, sig)
 	}
 	this.objMutex.Unlock()
 
-	UnregisterTcpProtocol(sig, this)
+	unregisterSignature(sig, this)
 }
 
 // SetAccessProvider sets the AccessProvider object responsible for authorizing
 // messages and clients on this protocol.
-func (this *TcpProtocol) SetAccessProvider(provider AccessProvider) {
+func (this *Protocol) SetAccessProvider(provider AccessProvider) {
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -88,7 +91,7 @@ func (this *TcpProtocol) SetAccessProvider(provider AccessProvider) {
 // SetCompressionProvider sets the CompressionProvider object responsible for
 // handling compression and decompression of messages passing through the
 // protocol.
-func (this *TcpProtocol) SetCompressionProvider(provider CompressionProvider) {
+func (this *Protocol) SetCompressionProvider(provider CompressionProvider) {
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -102,7 +105,7 @@ func (this *TcpProtocol) SetCompressionProvider(provider CompressionProvider) {
 
 // SetCryptoProvider sets the CryptoProvider object responsible for
 // handling encryption/decryption of messages passing through the protocol.
-func (this *TcpProtocol) SetCryptoProvider(provider CryptoProvider) {
+func (this *Protocol) SetCryptoProvider(provider CryptoProvider) {
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -114,13 +117,79 @@ func (this *TcpProtocol) SetCryptoProvider(provider CryptoProvider) {
 	provider.Init()
 }
 
+// Shutdown removes the Protocol from the net service, also unregistering all
+// associated message type signatures in the process.
+func (this *Protocol) Shutdown() {
+	unregisterProtocol(this)
+}
+
+// getAccess queries this Protocol's AccessProvider and returns its access level.
+// Connections are automatically closed if there is no AccessProvider registered,
+// or if an error is returned from the provider during the call to Authorize.
+func (this *Protocol) getAccess(con Connection) byte {
+	this.objMutex.RLock()
+	defer this.objMutex.RUnlock()
+
+	if this.security == nil {
+		log.Debug(
+			"No access provider registered. Dropping client %v", 
+			con.Id(),
+		)
+		con.Close()
+		return 0
+	}
+
+	access, err := this.security.Authorize(con)
+	if err != nil {
+		log.Debug("Error authorizing client %v (%v)", con.Id(), err)
+		con.Close()
+		return 0
+	}
+
+	return access
+}
+
+// onConnect is notified by the net service of new clients entering the system.
+func (this *Protocol) onConnect(con Connection) {
+	this.cliMutex.Lock()
+	defer this.cliMutex.Unlock()
+
+	access := this.getAccess(con)
+	if access < 1 {
+		return
+	}
+
+	this.cliMap[con.Id()] = con
+
+	log.Debug("Connection %v registered for Proto %v", con.Id(), this.name)
+}
+
+// onDisconnect is notified by the net service of clients leaving the system.
+func (this *Protocol) onDisconnect(con Connection) {
+	this.cliMutex.Lock()
+	defer this.cliMutex.Unlock()
+
+	if this.cliMap[con.Id()] == nil {
+		return
+	}
+	
+	delete(this.cliMap, con.Id())
+
+	log.Debug("Connection %v unregistered from Proto %v", con.Id(), this.name)
+}
+
 // rcvMsg is the message pipeline for incoming messages. First, the protocol
 // is checked to see if a message processor is registered. Next, the registered
 // AccessProvider is queried to make sure the message is allowed to pass. Then,
 // the message is passed through registered Decryption and Decompression 
 // processes if registered and necessary. Finally, the pre-processed message is
-// passed the message processor for final processing.
-func (this *TcpProtocol) rcvMsg(msg *NetMsg) {
+// passed to the message processor for final processing.
+func (this *Protocol) rcvMsg(msg *NetMsg) {
+	access := this.getAccess(msg.con)
+	if access < 1 {
+		return
+	}
+
 	sig := GetMsgSig(msg.header)
 
 	this.objMutex.RLock()
@@ -130,43 +199,8 @@ func (this *TcpProtocol) rcvMsg(msg *NetMsg) {
 
 	if proc == nil {
 		log.Debug("No valid message processor (sig %v). Dropping message", sig)
-		msg.cli.close()
+		msg.con.Close()
 		return
-	}
-
-	if this.security == nil {
-		log.Debug(
-			"No access provider registered. Dropping client %v", 
-			msg.cli.id,
-		)
-		msg.cli.close()
-		return
-
-		success, err := this.security.Authorize(msg)
-		if err != nil {
-			log.Debug("Error authorizing client %v", msg.cli.id)
-			msg.cli.close()
-			return
-		}
-
-		if !success {
-			log.Debug("Client not authorized (%v)", msg.cli.id)
-			msg.cli.close()
-			return
-		}
-	}
-
-	// register client if not already registered
-	this.cliMutex.RLock()
-	cli := this.cliMap[msg.cli.id]
-	this.cliMutex.RUnlock()
-
-	if cli == nil {
-		this.cliMutex.Lock()
-		this.cliMap[msg.cli.id] = msg.cli
-		this.cliMutex.Unlock()
-
-		log.Debug("Client %v registered for protocol %v", msg.cli.id, this.name)
 	}
 
 	if GetMsgEncryptedFlag(msg.header) {
@@ -211,7 +245,7 @@ func (this *TcpProtocol) rcvMsg(msg *NetMsg) {
 		}
 	}
 
-	err := proc.ProcessMsg(msg)
+	err := proc.ProcessMsg(msg, access)
 	if err != nil {
 		log.Debug(
 			"Error processing message. Dropping (proto: %s)", 

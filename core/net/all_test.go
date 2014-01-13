@@ -45,13 +45,17 @@ func (this *TextTestMsgProc) Close() {}
 func (this *TextTestMsgProc) Init() {}
 
 // ProcessMsg takes a NetMsg and logs it to the informational log.
-func (this *TextTestMsgProc) ProcessMsg(msg *NetMsg) error {
-	log.Info(string(msg.GetPayload()))
+func (this *TextTestMsgProc) ProcessMsg(msg *NetMsg, access byte) error {
+	log.Info(
+		"From [%v]: %v",
+		msg.con.Id(),
+		string(msg.GetPayload()),
+	)
 	return nil
 }
 
 // UNUSED
-func (this *TextTestMsgProc) SendMsg(id uint32, msg *NetMsg) error {
+func (this *TextTestMsgProc) SendMsg(id uint32, msg *NetMsg, access byte) error {
 	return nil
 }
 
@@ -66,8 +70,8 @@ func (this *TextTestAccess) Close() {}
 func (this *TextTestAccess) Init() {}
 
 // Authorize implements no security. It authorizes all clients and messages.
-func (this *TextTestAccess) Authorize(msg *NetMsg) (bool, error) {
-	return true, nil
+func (this *TextTestAccess) Authorize(con Connection) (byte, error) {
+	return 255, nil
 }
 
 // TestHeaderOpts runs all of the header set and get options on a variety 
@@ -90,8 +94,8 @@ func TestTCPSrv(t *testing.T) {
 	SetMsgPayload([]byte(msg), data)
 
 	// set up the protocol
-	proto := NewTcpProtocol("TestProto")
-	proto.AddSig(TEST_MSG_TYPE, new(TextTestMsgProc))
+	proto := NewProtocol("TestTcpProto")
+	proto.AddSignature(TEST_MSG_TYPE, new(TextTestMsgProc))
 	proto.SetAccessProvider(new(TextTestAccess))
 
 	// fire up the tcp server
@@ -106,6 +110,8 @@ func TestTCPSrv(t *testing.T) {
 	}
 
 	<-time.After(5 * time.Second)
+
+	proto.Shutdown()
 	srv.Stop()
 }
 
