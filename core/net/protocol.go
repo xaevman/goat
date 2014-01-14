@@ -19,8 +19,30 @@ import (
 
 // Stdlib imports.
 import (
+	"errors"
+	"fmt"
 	"sync"
 )
+
+// Perf counters.
+const (
+	PERF_SEND_COUNT = iota
+	PERF_SEND_TOTAL
+	PERF_RCV_COUNT
+	PERF_RCV_TOTAL
+	PERF_MSG_TOTAL
+	PERF_COUNT
+)
+
+// Perf counter friendly names.
+var perfNames = []string {
+	"SendCount",
+	"SendTotal",
+	"ReceiveCount",
+	"ReceiveTotal",
+	"MsgTotal",
+}
+
 
 // Protocol represents a collection of related clients, message type
 // signatures, and the message processing, access, crypto, and compression
@@ -35,6 +57,7 @@ type Protocol struct {
 	objMutex   sync.RWMutex
 	security   AccessProvider
 	sigMap     map[uint16]MsgProcessor
+	perfs      *PerfCounters
 }
 
 // NewProtocol is a helper constructor function which creates a newly initialized
@@ -42,9 +65,10 @@ type Protocol struct {
 // for use.
 func NewProtocol(pName string) *Protocol {
 	newProto := Protocol {
-		cliMap:   make(map[uint32]Connection, 0),
-		name:     pName,
-		sigMap:   make(map[uint16]MsgProcessor, 0),
+		cliMap: make(map[uint32]Connection, 0),
+		name:   pName,
+		sigMap: make(map[uint16]MsgProcessor, 0),
+		perfs:  NewPerfs(PERF_COUNT, perfNames),
 	}
 
 	registerProtocol(&newProto)
@@ -54,24 +78,44 @@ func NewProtocol(pName string) *Protocol {
 
 // AddSig registers a message type signature and its associated message processing
 // object with this protocol.
-func (this *Protocol) AddSignature(sig uint16, proc MsgProcessor) {
+func (this *Protocol) AddSignature(proc MsgProcessor) {
 	this.objMutex.Lock()
-	this.sigMap[sig] = proc
-	this.objMutex.Unlock()
+	defer this.objMutex.Unlock()
 
-	registerSignature(sig, this)
+	if this.sigMap[proc.Signature()] != nil {
+		log.Error(
+			"MsgProcessor already registered (sig: %v), aborting registration",
+			proc.Signature(),
+		)
+		return
+	}
+
+	proc.Init(this)
+
+	this.sigMap[proc.Signature()] = proc
+	registerSignature(proc.Signature(), this)
 }
 
 // DeleteSig removes a message type signature and its associated message processing
 // object if one exists.
-func (this *Protocol) DeleteSignature(sig uint16, proc MsgProcessor) {
+func (this *Protocol) DeleteSignature(proc MsgProcessor) {
 	this.objMutex.Lock()
-	if this.sigMap[sig] == proc {
-		delete(this.sigMap, sig)
-	}
-	this.objMutex.Unlock()
+	defer this.objMutex.Unlock()
 
-	unregisterSignature(sig, this)
+	if this.sigMap[proc.Signature()] != proc {
+		log.Error(
+			"MsgProcessor registered, but doesn't match the call " +
+			"to unregister (sig: %v). Aborting...",
+			proc.Signature(),
+		)
+		return
+	}
+
+	proc = this.sigMap[proc.Signature()]
+	proc.Close()
+
+	delete(this.sigMap, proc.Signature())
+	unregisterSignature(proc.Signature(), this)
 }
 
 // SetAccessProvider sets the AccessProvider object responsible for authorizing
@@ -85,7 +129,7 @@ func (this *Protocol) SetAccessProvider(provider AccessProvider) {
 	}
 
 	this.security = provider
-	provider.Init()
+	provider.Init(this)
 }
 
 // SetCompressionProvider sets the CompressionProvider object responsible for
@@ -100,7 +144,7 @@ func (this *Protocol) SetCompressionProvider(provider CompressionProvider) {
 	}
 
 	this.compressor = provider
-	provider.Init()
+	provider.Init(this)
 }
 
 // SetCryptoProvider sets the CryptoProvider object responsible for
@@ -114,7 +158,7 @@ func (this *Protocol) SetCryptoProvider(provider CryptoProvider) {
 	}
 
 	this.crypto = provider
-	provider.Init()
+	provider.Init(this)
 }
 
 // Shutdown removes the Protocol from the net service, also unregistering all
@@ -135,14 +179,14 @@ func (this *Protocol) getAccess(con Connection) byte {
 			"No access provider registered. Dropping client %v", 
 			con.Id(),
 		)
-		con.Close()
+		go con.Close()
 		return 0
 	}
 
 	access, err := this.security.Authorize(con)
 	if err != nil {
 		log.Debug("Error authorizing client %v (%v)", con.Id(), err)
-		con.Close()
+		go con.Close()
 		return 0
 	}
 
@@ -172,7 +216,7 @@ func (this *Protocol) onDisconnect(con Connection) {
 	if this.cliMap[con.Id()] == nil {
 		return
 	}
-	
+
 	delete(this.cliMap, con.Id())
 
 	log.Debug("Connection %v unregistered from Proto %v", con.Id(), this.name)
@@ -185,6 +229,9 @@ func (this *Protocol) onDisconnect(con Connection) {
 // processes if registered and necessary. Finally, the pre-processed message is
 // passed to the message processor for final processing.
 func (this *Protocol) rcvMsg(msg *NetMsg) {
+	defer this.perfs.Increment(PERF_RCV_TOTAL)
+	defer this.perfs.Increment(PERF_MSG_TOTAL)
+
 	access := this.getAccess(msg.con)
 	if access < 1 {
 		return
@@ -199,7 +246,7 @@ func (this *Protocol) rcvMsg(msg *NetMsg) {
 
 	if proc == nil {
 		log.Debug("No valid message processor (sig %v). Dropping message", sig)
-		msg.con.Close()
+		go msg.con.Close()
 		return
 	}
 
@@ -245,11 +292,87 @@ func (this *Protocol) rcvMsg(msg *NetMsg) {
 		}
 	}
 
-	err := proc.ProcessMsg(msg, access)
+	err := proc.ReceiveMsg(msg, access)
 	if err != nil {
 		log.Debug(
-			"Error processing message. Dropping (proto: %s)", 
+			"Error processing message (proto: %s, err: %v)", 
 			this.name,
+			err,
 		)
 	}
+
+	this.perfs.Increment(PERF_RCV_COUNT)
+}
+
+// sendMsg distributes the given msg to a registerd client with that id,
+// if one exists.
+func (this *Protocol) sendMsg(id uint32, msg *NetMsg) error {
+	defer this.perfs.Increment(PERF_SEND_TOTAL)
+	defer this.perfs.Increment(PERF_MSG_TOTAL)
+
+	this.cliMutex.RLock()
+	cli := this.cliMap[id]
+	this.cliMutex.RUnlock()
+
+	if cli == nil {
+		panic("send")
+		return errors.New(fmt.Sprintf(
+			"sendMsg failed: Client %v doesn't exist.",
+			id,
+		))
+	}
+
+	this.objMutex.RLock()
+	defer this.objMutex.RUnlock()
+
+	sig := GetMsgSig(msg.header)
+	if this.sigMap[sig] == nil {
+		panic("send")
+		return errors.New(fmt.Sprintf(
+			"Can't send a message for an unregistered message type " +
+			"signature (%v)",
+			sig,
+		))
+	}
+
+	if GetMsgCompressedFlag(msg.header) {
+		if this.compressor == nil {
+			panic("send")
+			return errors.New(
+				"Compression bit set, but no CompressionProvider " +
+				"registered.",
+			)
+		}
+
+		err := this.compressor.Compress(msg)
+		if err != nil {
+			panic("send")
+			return errors.New(fmt.Sprintf(
+				"Error compressing data: %v", err,
+			))
+		}
+	}
+
+	if GetMsgEncryptedFlag(msg.header) {
+		if this.crypto == nil {
+			panic("send")
+			return errors.New(
+				"Encryption bit set, but no CryptoProvider registered.",
+			)
+		}
+
+		err := this.crypto.Encrypt(msg)
+		if err != nil {
+			panic("send")
+			return errors.New(fmt.Sprintf(
+				"Error encrypting data: %v", err,
+			))
+		}
+	}
+
+	cli.Send(msg.GetBytes())
+	
+	this.perfs.Increment(PERF_SEND_COUNT)
+
+	return nil
 }

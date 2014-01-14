@@ -66,6 +66,10 @@ func (this *Lifecycle) QueryShutdown() <-chan bool {
 // to the client on the shutdown channel, and then blocks until the client
 // calls ShutdownComplete()
 func (this *Lifecycle) Shutdown() {
+	if !this.run {
+		return
+	}
+
 	this.StopHeart()
 	this.run = false
 	close(this.shutdownChan)

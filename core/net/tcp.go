@@ -26,7 +26,7 @@ import (
 )
 
 // TCP Buffer size for reading data off the line.
-const TCP_BUFFER_SIZE_B = 1 * 1024 // KB * B
+const TCP_BUFFER_SIZE_B = 512 // KB * B
 
 
 // TCPCli represents a TCP client object. The client object handles connecting
@@ -36,8 +36,8 @@ const TCP_BUFFER_SIZE_B = 1 * 1024 // KB * B
 type TCPCli struct {
 	discoChan  chan *tcpCon
 	id         uint32
-	srvMap     map[uint32]*tcpCon
-	mutex      sync.RWMutex
+	mutex      sync.Mutex
+	srv        *tcpCon
 	syncObj    *lifecycle.Lifecycle
 }
 
@@ -47,57 +47,51 @@ func NewTCPCli() *TCPCli {
 	cli := TCPCli {
 		discoChan: make(chan *tcpCon, 1),
 		id:        atomic.AddUint32(&netId, 1),
-		srvMap:    make(map[uint32]*tcpCon, 0),
 		syncObj:   lifecycle.New(),
 	}
 
 	return &cli
 }
 
-// Dial connects the TCPCli object to a new server endpoint. A TCPCli can
-// establish multiple connections for redundancy or load balancing.
-func (this *TCPCli) Dial(addr string) {
+// Dial connects the TCPCli object to a new server endpoint.
+func (this *TCPCli) Dial(addr string) error {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		log.Error("%v", err)
+		return err
+	}
+
+	log.Info("Connected to %v", addr)
+
+	tCon  := tcpCon{
+		discoChan: this.discoChan,
+		id:        atomic.AddUint32(&netId, 1),
+		readChan:  make(chan []byte),
+		socket:    conn.(*net.TCPConn),
+		syncObj:   lifecycle.New(),
+		writeChan: make(chan []byte),
+	}
+
+	this.srv = &tCon
+
+	onConnect(&tCon)
+
+	tCon.startHandlers()
+
 	go func() {
-		conn, err := net.Dial("tcp", addr)
-		if err != nil {
-			log.Error("%v", err)
-			return
-		}
-
-		log.Info("Connected to %v", addr)
-		
-		tCon := tcpCon{
-			discoChan: this.discoChan,
-			id:        atomic.AddUint32(&netId, 1),
-			readChan:  make(chan []byte, 1),
-			socket:    conn.(*net.TCPConn),
-			syncObj:   lifecycle.New(),
-			writeChan: make(chan []byte, 1),
-		}
-
-		this.mutex.Lock()
-		this.srvMap[tCon.id] = &tCon
-		this.mutex.Unlock()
-
-		onConnect(&tCon)
-
-		tCon.startHandlers()
-
 		for this.syncObj.QueryRun() {
 			select {
 			case srv := <-this.discoChan:
 				onDisconnect(srv)
-
-				this.mutex.Lock()
-				delete(this.srvMap, srv.id)
-				this.mutex.Unlock()
 			case <-this.syncObj.QueryShutdown():
-				log.Info("Shutting down %v", addr)
+				log.Info("Shutting down TCPCli %v", this.id)
 			}
 		}
 
 		this.syncObj.ShutdownComplete()
 	}()
+
+	return nil
 }
 
 // Shutdown closes all of the TCPCli's existing sockets and shuts down
@@ -106,10 +100,7 @@ func (this *TCPCli) Shutdown() {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	for _, srv := range this.srvMap {
-		srv.Close()
-	}
-
+	this.srv.Close()
 	this.syncObj.Shutdown()
 }
 
@@ -164,7 +155,7 @@ func (this *TCPSrv) Start(addr string) {
 				delete(this.cliMap, cli.id)
 				this.mutex.Unlock()
 			case <-this.syncObj.QueryShutdown():
-				log.Info("Shutting down %v", addr)
+				log.Info("Shutting down TCPSrv %v", addr)
 			}
 		}
 
@@ -196,10 +187,10 @@ func (this *TCPSrv) acceptConnections() {
 		cli := tcpCon{
 			discoChan: this.discoChan,
 			id:        atomic.AddUint32(&netId, 1),
-			readChan:  make(chan []byte, 1),
+			readChan:  make(chan []byte),
 			socket:    cliCon.(*net.TCPConn),
 			syncObj:   lifecycle.New(),
-			writeChan: make(chan []byte, 1),
+			writeChan: make(chan []byte),
 		}
 
 		this.mutex.Lock()
@@ -250,46 +241,37 @@ func (this *tcpCon) RemoteAddr() net.Addr {
 	return this.socket.RemoteAddr()
 }
 
+// Send takes raw data and sends it to the connection's write go routine.
+func (this *tcpCon) Send(data []byte) {
+	this.writeChan<- data
+}
+
 // buildMsg is called when raw data is received off of the line. This function
 // handles the segmentation of messages across multiple receive buffers or
-// the packing of multiple messages into a single buffer in the stream.
+// the packing of multiple messages into a single buffer in the stream. buildMsg
+// returns any extra buffer data leftover after processing.
 func (this *tcpCon) buildMsg(msgData []byte) []byte {
 	if len(msgData) < 1 {
 		return nil
 	}
 
 	if this.nextMsg == nil {
-		// search for a good header
-		if !ValidateMsgHeader(msgData) {
-			if len(msgData) > 1 {
-				return msgData[1:]
-			}
-
-			return nil
-		}
-
-		// start msg object for this message
-		size        := GetMsgSize(msgData)
 		this.nextMsg = &NetMsg {
-			con:    this,
-			data:   make([]byte, size),
-			header: GetMsgHeader(msgData),
+			con:       this,
+			hdrBuffer: make([]byte, 4),
 		}
 	}
 
 	// read available data, up to msg length
-	leftovers, complete := this.nextMsg.addData(msgData[4:])
+	leftovers, complete := this.nextMsg.addData(msgData)
 	if complete {
 		// dispatch message
-		routeMsg(this.nextMsg)
+		dispatchMsg := this.nextMsg
 		this.nextMsg = nil
+		routeMsg(dispatchMsg)
 	}
 
-	if leftovers != nil {
-		return leftovers
-	}
-
-	return nil
+	return leftovers
 }
 
 // handleReads runs in its own goroutine, looping endlessly, reading data
@@ -350,11 +332,11 @@ func (this *tcpCon) handleWrites() {
 func (this *tcpCon) runCli() {
 	for this.syncObj.QueryRun() {
 		select {
-		case buffer := <-this.readChan:
-			extra := this.buildMsg(buffer)
-			for extra != nil {
-				extra = this.buildMsg(extra)
-			}
+		case data := <-this.readChan:
+			for 
+				pending := this.buildMsg(data); 
+				pending != nil;
+				pending  = this.buildMsg(pending) {}
 		case <-this.syncObj.QueryShutdown():
 		}
 	}
@@ -382,7 +364,3 @@ func (this *tcpCon) startHandlers() {
 	go this.handleWrites()
 }
 
-// writeData accepts write events and forwards them to the handleWrites goroutine.
-func (this *tcpCon) writeData(data []byte) {
-	this.writeChan<- data
-}

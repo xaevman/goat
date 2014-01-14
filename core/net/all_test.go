@@ -19,60 +19,112 @@ import (
 
 import(
 	"math/rand"
-	"net"
 	"testing"
 	"time"
+	"sync/atomic"
 )
 
-// Testing msg type.
-const TEST_MSG_TYPE = 25
+// Message type IDs.
+const (
+	PING_MSG_TYPE = 25
+	PONG_MSG_TYPE = 26
+)
 
-// Shared data buffer used for TCPSrv test.
-var data []byte
 
-// Header values to test.
+// Header values for HeaderOps test.
 var headerTests = []uint16 {
 	0, 1, 4, 31, 64, 501, 1002, 1023,
 }
 
-// Test message processor.
-type TextTestMsgProc struct {}
+// Shared data for TCP test.
+var (
+	msgCount uint64 = 0
+	pingMsgProc     = new(PingMsgProc)
+	pingTxt         = "ping"
+	pongMsgProc     = new(PongMsgProc)
+	pongTxt         = "pong"
+	proto           = NewProtocol("TestProto")
+	srvAddr         = "127.0.0.1:6600"
+)
 
-// UNUSED
-func (this *TextTestMsgProc) Close() {}
 
-// UNUSED
-func (this *TextTestMsgProc) Init() {}
+// Ping message processor
+type PingMsgProc struct {
+	parent *Protocol
+}
+func (this *PingMsgProc) Close() {}
+func (this *PingMsgProc) Init(proto *Protocol) {
+	this.parent = proto
+}
+func (this *PingMsgProc) ReceiveMsg(msg *NetMsg, access byte) error {
+	log.Debug(
+		"[%v->%v]: %v",
+		msg.con.RemoteAddr(),
+		msg.con.LocalAddr(),
+		string(msg.GetPayload()),
+	)
 
-// ProcessMsg takes a NetMsg and logs it to the informational log.
-func (this *TextTestMsgProc) ProcessMsg(msg *NetMsg, access byte) error {
-	log.Info(
-		"From [%v]: %v",
-		msg.con.Id(),
+	// send a pong message back to client
+	return pongMsgProc.SendMsg(msg.con.Id(), pongTxt)
+
+	return nil
+}
+func (this *PingMsgProc) SendMsg(targetId uint32, data interface{}) error {
+	txt := data.(string)
+	msg := NetMsg {
+		data:   []byte(txt),
+		header: this.Signature(),
+	}
+
+	err := this.parent.sendMsg(targetId, &msg)
+	return err
+}
+func (this *PingMsgProc) Signature() uint16 {
+	return PING_MSG_TYPE
+}
+
+
+// Pong message processor
+type PongMsgProc struct {
+	parent *Protocol
+}
+func (this *PongMsgProc) Close() {}
+func (this *PongMsgProc) Init(proto *Protocol) {
+	this.parent = proto
+}
+func (this *PongMsgProc) ReceiveMsg(msg *NetMsg, access byte) error {
+	log.Debug(
+		"[%v->%v]: %v",
+		msg.con.RemoteAddr(),
+		msg.con.LocalAddr(),
 		string(msg.GetPayload()),
 	)
 	return nil
 }
+func (this *PongMsgProc) SendMsg(targetId uint32, data interface{}) error {
+	txt := data.(string)
+	msg := NetMsg {
+		data:   []byte(txt),
+		header: this.Signature(),
+	}
 
-// UNUSED
-func (this *TextTestMsgProc) SendMsg(id uint32, msg *NetMsg, access byte) error {
-	return nil
+	err := this.parent.sendMsg(targetId, &msg)
+	return err
+}
+func (this *PongMsgProc) Signature() uint16 {
+	return PONG_MSG_TYPE
 }
 
 
-// Test access provider.
-type TextTestAccess struct {}
-
-// UNUSED
-func (this *TextTestAccess) Close() {}
-
-// UNUSED
-func (this *TextTestAccess) Init() {}
-
-// Authorize implements no security. It authorizes all clients and messages.
-func (this *TextTestAccess) Authorize(con Connection) (byte, error) {
+// Stand-in AccessController
+type AllAccess struct {}
+func (this *AllAccess) Authorize(con Connection) (byte, error) {
 	return 255, nil
 }
+func (this *AllAccess) Close() {}
+func (this *AllAccess) Init(proto *Protocol) {}
+
+
 
 // TestHeaderOpts runs all of the header set and get options on a variety 
 // of header message type signatures.
@@ -84,49 +136,103 @@ func TestHeaderOps(t *testing.T) {
 
 // TestTCPSrv tests the TCPSrv class with a simple text messaging protocol.
 func TestTCPSrv(t *testing.T) {
-	log.DebugLogs = true
-
-	// build msg
-	msg    := "test msg"
-	header := uint16(TEST_MSG_TYPE)
-	data    = make([]byte, len(msg) + 4)
-	SetMsgHeader(header, data)
-	SetMsgPayload([]byte(msg), data)
+	log.Info("")
 
 	// set up the protocol
-	proto := NewProtocol("TestTcpProto")
-	proto.AddSignature(TEST_MSG_TYPE, new(TextTestMsgProc))
-	proto.SetAccessProvider(new(TextTestAccess))
+	proto.AddSignature(pingMsgProc)
+	proto.AddSignature(pongMsgProc)
+	proto.SetAccessProvider(new(AllAccess))
 
 	// fire up the tcp server
 	srv := NewTCPSrv()
-	srv.Start("127.0.0.1:6600")
+	srv.Start(srvAddr)
 
 	<-time.After(1 * time.Second)
 
-	for i := 0; i < 100; i++ {
-		<-time.After(time.Duration(rand.Intn(100)) * time.Millisecond)
-		go runClient(t)
-	}
-
-	<-time.After(5 * time.Second)
+	// run the tests
+	runSimpleTcpTest(1,   1,    t)
+	runSimpleTcpTest(1,   10,   t)
+	runSimpleTcpTest(1,   100,  t)
+	runSimpleTcpTest(1,   1000, t)
+	runSimpleTcpTest(10,  1,    t)
+	runSimpleTcpTest(10,  10,   t)
+	runSimpleTcpTest(10,  100,  t)
+	runSimpleTcpTest(10,  1000, t)
+	runSimpleTcpTest(100, 1,    t)
+	runSimpleTcpTest(100, 10,   t)
+	runSimpleTcpTest(100, 100,  t)
+	runSimpleTcpTest(100, 1000, t)
 
 	proto.Shutdown()
 	srv.Stop()
 }
 
-// runClient connects to the test TCPSrv instance and sends lots of
-// messages at semi-random intervals.
-func runClient(t *testing.T) {
-	conn, err := net.Dial("tcp", "127.0.0.1:6600")
-	if err != nil {
-		t.Fatal(err)
+func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
+	log.DebugLogs = true
+
+	log.Info("SimpleTcpTest (%v clients, %v msg/cli", cliCount, sendCount)
+
+	proto.perfs.Reset()
+
+	cliList := make([]*TCPCli, 0)
+
+	for i := 0; i < cliCount; i++ {
+		cli := NewTCPCli()
+		err := cli.Dial(srvAddr)
+		if err != nil {
+			t.Fatal(err)
+			return
+		}
+
+		cliList = append(cliList, cli)
 	}
 
-	for i := 0; i < 1000; i++ {
-		conn.Write(data)
-		<-time.After(time.Duration(rand.Intn(15)) * time.Millisecond)
+
+	log.Info("%v clients connected", len(cliList))
+	doneChan := make(chan bool)
+	<-time.After(2 * time.Second)
+    
+    start := time.Now()
+
+    for i := range cliList {
+		go runClient(cliList[i], sendCount, doneChan, t)
 	}
+
+	for i := 0; i < len(cliList); i++ {
+		<-doneChan
+	}
+
+	runTime := time.Since(start)
+	
+	<-time.After(1 * time.Second)
+
+	perfTotal := proto.perfs.Get(PERF_SEND_TOTAL)
+
+	log.Info(
+		"%v clients, (%v, %v) messages in %v (%.2f msg/sec)",
+		len(cliList),
+		msgCount,
+		perfTotal,
+		runTime,
+		float64(perfTotal)/runTime.Seconds(),
+	)
+
+	log.Info(proto.perfs.String())
+}
+
+// runClient connects to the test TCPSrv instance and sends lots of
+// messages at semi-random intervals.
+func runClient(cli *TCPCli, sendCount int, doneChan chan bool, t *testing.T) {
+	for i := 0; i < sendCount; i++ {
+		pingMsgProc.SendMsg(cli.srv.id, pingTxt)
+		atomic.AddUint64(&msgCount, 1)
+
+		// simulate a normal amount of internet latency
+		<-time.After(time.Duration(rand.Intn(5) + 15) * time.Millisecond)
+	}
+
+	cli.Shutdown()
+	doneChan<- true
 }
 
 // testHeaders is a generalized function for testing all of the get and set

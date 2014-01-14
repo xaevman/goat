@@ -76,7 +76,7 @@ var (
 type AccessProvider interface {
 	Authorize(con Connection) (byte, error)
 	Close()
-	Init()
+	Init(proto *Protocol)
 }
 
 // CompressionProvider specifies the interface which network protocols will
@@ -87,7 +87,7 @@ type CompressionProvider interface {
 	Close()
 	Compress(msg *NetMsg) error
 	Decompress(msg *NetMsg) error
-	Init() 
+	Init(proto *Protocol) 
 }
 
 // Connection specifies the common interface that is used by AccessProvider
@@ -99,6 +99,7 @@ type Connection interface {
 	Key() string
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
+	Send(data []byte)
 }
 
 // CryptoProvider specifies the interface which network protocols will use
@@ -109,7 +110,7 @@ type CryptoProvider interface {
 	Close()
 	Decrypt(msg *NetMsg) error
 	Encrypt(msg *NetMsg) error
-	Init()
+	Init(proto *Protocol)
 }
 
 // MsgProcessor specifies the entry and exit points of the network system which
@@ -117,10 +118,12 @@ type CryptoProvider interface {
 // accept and disseminate outgoing messages to the correct endpoints.
 type MsgProcessor interface {
 	Close()
-	Init()
-	ProcessMsg(msg *NetMsg, access byte) error
-	SendMsg(id uint32, msg *NetMsg, access byte) error
+	Init(proto *Protocol)
+	ReceiveMsg(msg *NetMsg, access byte) error
+	SendMsg(targetId uint32, data interface{}) error
+	Signature() uint16
 }
+
 
 // GetMsgCompressedFlag retrieves bit 11 of the message header, which is used
 // to specify whether the message data itself is compressed or not.
@@ -276,12 +279,12 @@ func routeMsg(msg *NetMsg) {
 	sig := GetMsgSig(msg.header)
 
 	routeMutex.RLock()
-	defer routeMutex.RUnlock()
-
-	proto := sigMap  [sig]
+	proto := sigMap[sig]
 	if proto == nil {
+		routeMutex.RUnlock()
 		return
 	}
+	routeMutex.RUnlock()
 
 	proto.rcvMsg(msg)
 }
