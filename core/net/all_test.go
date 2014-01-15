@@ -56,24 +56,27 @@ func (this *PingMsgProc) Close() {}
 func (this *PingMsgProc) Init(proto *Protocol) {
 	this.parent = proto
 }
-func (this *PingMsgProc) ReceiveMsg(msg *NetMsg, access byte) error {
+func (this *PingMsgProc) QueryReceiveMsg() <-chan interface{} {
+	return nil
+}
+func (this *PingMsgProc) ReceiveMsg(msg *Msg, access byte) error {
 	log.Debug(
 		"[%v->%v]: %v",
-		msg.con.RemoteAddr(),
-		msg.con.LocalAddr(),
+		msg.Con.RemoteAddr(),
+		msg.Con.LocalAddr(),
 		string(msg.GetPayload()),
 	)
 
 	// send a pong message back to client
-	return pongMsgProc.SendMsg(msg.con.Id(), pongTxt)
+	return pongMsgProc.SendMsg(msg.Con.Id(), pongTxt)
 
 	return nil
 }
 func (this *PingMsgProc) SendMsg(targetId uint32, data interface{}) error {
 	txt := data.(string)
-	msg := NetMsg {
-		data:   []byte(txt),
-		header: this.Signature(),
+	msg := Msg {
+		Data:   []byte(txt),
+		Header: this.Signature(),
 	}
 
 	err := this.parent.sendMsg(targetId, &msg)
@@ -92,20 +95,23 @@ func (this *PongMsgProc) Close() {}
 func (this *PongMsgProc) Init(proto *Protocol) {
 	this.parent = proto
 }
-func (this *PongMsgProc) ReceiveMsg(msg *NetMsg, access byte) error {
+func (this *PongMsgProc) QueryReceiveMsg() <-chan interface{} {
+	return nil
+}
+func (this *PongMsgProc) ReceiveMsg(msg *Msg, access byte) error {
 	log.Debug(
 		"[%v->%v]: %v",
-		msg.con.RemoteAddr(),
-		msg.con.LocalAddr(),
+		msg.Con.RemoteAddr(),
+		msg.Con.LocalAddr(),
 		string(msg.GetPayload()),
 	)
 	return nil
 }
 func (this *PongMsgProc) SendMsg(targetId uint32, data interface{}) error {
 	txt := data.(string)
-	msg := NetMsg {
-		data:   []byte(txt),
-		header: this.Signature(),
+	msg := Msg {
+		Data:   []byte(txt),
+		Header: this.Signature(),
 	}
 
 	err := this.parent.sendMsg(targetId, &msg)

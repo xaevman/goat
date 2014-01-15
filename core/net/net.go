@@ -85,8 +85,8 @@ type AccessProvider interface {
 // set will flow through Decompress().
 type CompressionProvider interface {
 	Close()
-	Compress(msg *NetMsg) error
-	Decompress(msg *NetMsg) error
+	Compress(msg *Msg) error
+	Decompress(msg *Msg) error
 	Init(proto *Protocol) 
 }
 
@@ -108,8 +108,8 @@ type Connection interface {
 // set will flow through Decrypt().
 type CryptoProvider interface {
 	Close()
-	Decrypt(msg *NetMsg) error
-	Encrypt(msg *NetMsg) error
+	Decrypt(msg *Msg) error
+	Encrypt(msg *Msg) error
 	Init(proto *Protocol)
 }
 
@@ -119,7 +119,8 @@ type CryptoProvider interface {
 type MsgProcessor interface {
 	Close()
 	Init(proto *Protocol)
-	ReceiveMsg(msg *NetMsg, access byte) error
+	QueryReceiveMsg() <-chan interface{}
+	ReceiveMsg(msg *Msg, access byte) error
 	SendMsg(targetId uint32, data interface{}) error
 	Signature() uint16
 }
@@ -273,10 +274,10 @@ func onDisconnect(con Connection) {
 	}
 }
 
-// routeMsg takes an incoming NetMsg and routes it to the appropriate protocol
+// routeMsg takes an incoming Msg and routes it to the appropriate protocol
 // if one is registered in the route map, otherwise the message is dropped.
-func routeMsg(msg *NetMsg) {
-	sig := GetMsgSig(msg.header)
+func routeMsg(msg *Msg) {
+	sig := GetMsgSig(msg.Header)
 
 	routeMutex.RLock()
 	proto := sigMap[sig]

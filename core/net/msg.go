@@ -1,6 +1,6 @@
 //  ---------------------------------------------------------------------------
 //
-//  netmsg.go
+//  msg.go
 //
 //  Copyright (c) 2014, Jared Chavez. 
 //  All rights reserved.
@@ -12,52 +12,53 @@
 
 package net
 
-// NetMsg represents the baseline structure of data used for packaging
+// Msg represents the baseline structure of data used for packaging
 // network messages to be sent via the net service.
-type NetMsg struct {
-	con       Connection
+type Msg struct {
+	Con       Connection
+	Data      []byte
+	Header    uint16
+
 	cursor    int
-	data      []byte
-	header    uint16
 	hdrBuffer []byte
 }
 
 // NewNetMsg is a constructor helper which returns a pointer to a new
-// NetMsg object with the given header and payload.
-func NewNetMsg(header uint16, payload []byte) *NetMsg {
-	newMsg := NetMsg {
-		data:   payload,
-		header: header,
+// Msg object with the given header and payload.
+func NewMsg(header uint16, payload []byte) *Msg {
+	newMsg := Msg {
+		Data:   payload,
+		Header: header,
 	}
 
 	return &newMsg
 }
 
-// GetBytes retreives the NetMsg, fully serialized with header and
+// GetBytes retreives the Msg, fully serialized with header and
 // payload, for transmission.
-func (this *NetMsg) GetBytes() []byte {
-	buffer := make([]byte, len(this.data) + 4)
+func (this *Msg) GetBytes() []byte {
+	buffer := make([]byte, len(this.Data) + 4)
 
-	SetMsgHeader(this.header, buffer)
-	SetMsgPayload(this.data,  buffer)
+	SetMsgHeader(this.Header, buffer)
+	SetMsgPayload(this.Data,  buffer)
 
 	return buffer
 }
 
-// GetHeader retrieves the header portion of the NetMsg object.
-func (this *NetMsg) GetHeader() uint16 {
-	return this.header
+// GetHeader retrieves the header portion of the Msg object.
+func (this *Msg) GetHeader() uint16 {
+	return this.Header
 }
 
-// GetPayload retrieves the payload portion of the NetMsg object.
-func (this *NetMsg) GetPayload() []byte {
-	return this.data
+// GetPayload retrieves the payload portion of the Msg object.
+func (this *Msg) GetPayload() []byte {
+	return this.Data
 }
 
 // addData takes bytes off of the line and adds them into the data buffer.
 // Once the data buffer is full, any remnants are returned (because they are
 // a part of the next message coming in the stream).
-func (this *NetMsg) addData(msgData []byte) ([]byte, bool) {
+func (this *Msg) addData(msgData []byte) ([]byte, bool) {
 	var dCount, hCount int
 
 	if this.cursor < HEADER_LEN_B {
@@ -68,13 +69,13 @@ func (this *NetMsg) addData(msgData []byte) ([]byte, bool) {
 			return nil, false
 		}
 
-		this.header    = GetMsgHeader(this.hdrBuffer)
-		this.data      = make([]byte, GetMsgSize(this.hdrBuffer))
+		this.Header    = GetMsgHeader(this.hdrBuffer)
+		this.Data      = make([]byte, GetMsgSize(this.hdrBuffer))
 		this.hdrBuffer = nil
 	}
 
 	dCount = copy(
-		this.data[this.cursor - HEADER_LEN_B:], 
+		this.Data[this.cursor - HEADER_LEN_B:], 
 		msgData[hCount:],
 	)
 
@@ -84,7 +85,7 @@ func (this *NetMsg) addData(msgData []byte) ([]byte, bool) {
 		return msgData[dCount + hCount:], true
 	}
 
-	if this.cursor >= len(this.data) {
+	if this.cursor >= len(this.Data) {
 		return nil, true
 	}
 

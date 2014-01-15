@@ -226,22 +226,27 @@ func (this *Protocol) onDisconnect(con Connection) {
 	log.Debug("Connection %v unregistered from Proto %v", con.Id(), this.name)
 }
 
+// SendMsg transmits the supplied message to the target connection Id.
+func (this *Protocol) SendMsg(id uint32, msg *Msg) error {
+	return this.sendMsg(id, msg)
+}
+
 // rcvMsg is the message pipeline for incoming messages. First, the protocol
 // is checked to see if a message processor is registered. Next, the registered
 // AccessProvider is queried to make sure the message is allowed to pass. Then,
 // the message is passed through registered Decryption and Decompression 
 // processes if registered and necessary. Finally, the pre-processed message is
 // passed to the message processor for final processing.
-func (this *Protocol) rcvMsg(msg *NetMsg) {
+func (this *Protocol) rcvMsg(msg *Msg) {
 	defer this.perfs.Increment(PERF_RCV_TOTAL)
 	defer this.perfs.Increment(PERF_MSG_TOTAL)
 
-	access := this.getAccess(msg.con)
+	access := this.getAccess(msg.Con)
 	if access < 1 {
 		return
 	}
 
-	sig := GetMsgSig(msg.header)
+	sig := GetMsgSig(msg.Header)
 
 	this.objMutex.RLock()
 	defer this.objMutex.RUnlock()
@@ -250,11 +255,11 @@ func (this *Protocol) rcvMsg(msg *NetMsg) {
 
 	if proc == nil {
 		log.Debug("No valid message processor (sig %v). Dropping message", sig)
-		go msg.con.Close()
+		go msg.Con.Close()
 		return
 	}
 
-	if GetMsgEncryptedFlag(msg.header) {
+	if GetMsgEncryptedFlag(msg.Header) {
 		if this.crypto == nil {
 			log.Debug(
 				"Encryption flag set, but no encrpytion provider." +
@@ -275,7 +280,7 @@ func (this *Protocol) rcvMsg(msg *NetMsg) {
 		}
 	}
 
-	if GetMsgCompressedFlag(msg.header) {
+	if GetMsgCompressedFlag(msg.Header) {
 		if this.compressor == nil {
 			log.Debug(
 				"Compression flag set, but no compression provider." +
@@ -310,7 +315,7 @@ func (this *Protocol) rcvMsg(msg *NetMsg) {
 
 // sendMsg distributes the given msg to a registerd client with that id,
 // if one exists.
-func (this *Protocol) sendMsg(id uint32, msg *NetMsg) error {
+func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 	defer this.perfs.Increment(PERF_SEND_TOTAL)
 	defer this.perfs.Increment(PERF_MSG_TOTAL)
 
@@ -329,7 +334,7 @@ func (this *Protocol) sendMsg(id uint32, msg *NetMsg) error {
 	this.objMutex.RLock()
 	defer this.objMutex.RUnlock()
 
-	sig := GetMsgSig(msg.header)
+	sig := GetMsgSig(msg.Header)
 	if this.sigMap[sig] == nil {
 		panic("send")
 		return errors.New(fmt.Sprintf(
@@ -339,7 +344,7 @@ func (this *Protocol) sendMsg(id uint32, msg *NetMsg) error {
 		))
 	}
 
-	if GetMsgCompressedFlag(msg.header) {
+	if GetMsgCompressedFlag(msg.Header) {
 		if this.compressor == nil {
 			panic("send")
 			return errors.New(
@@ -357,7 +362,7 @@ func (this *Protocol) sendMsg(id uint32, msg *NetMsg) error {
 		}
 	}
 
-	if GetMsgEncryptedFlag(msg.header) {
+	if GetMsgEncryptedFlag(msg.Header) {
 		if this.crypto == nil {
 			panic("send")
 			return errors.New(

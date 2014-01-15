@@ -206,7 +206,7 @@ type tcpCon struct {
 	discoChan chan *tcpCon
 	id        uint32
 	key       string
-	nextMsg   *NetMsg
+	nextMsg   *Msg
 	readChan  chan []byte
 	socket    *net.TCPConn
 	syncObj   *lifecycle.Lifecycle
@@ -253,8 +253,8 @@ func (this *tcpCon) buildMsg(msgData []byte) []byte {
 	}
 
 	if this.nextMsg == nil {
-		this.nextMsg = &NetMsg {
-			con:       this,
+		this.nextMsg = &Msg {
+			Con:       this,
 			hdrBuffer: make([]byte, 4),
 		}
 	}
