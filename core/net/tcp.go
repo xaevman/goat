@@ -2,7 +2,7 @@
 //
 //  tcp.go
 //
-//  Copyright (c) 2013, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez. 
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -94,12 +94,9 @@ func (this *TCPCli) Dial(addr string) error {
 	return nil
 }
 
-// Shutdown closes all of the TCPCli's existing sockets and shuts down
-// the client's go routines.
+// Shutdown closes the TCPCli's existing socket as well as all of the
+// client's go routines.
 func (this *TCPCli) Shutdown() {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
-
 	this.srv.Close()
 	this.syncObj.Shutdown()
 }

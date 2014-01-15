@@ -2,7 +2,7 @@
 //
 //  lifecycle.go
 //
-//  Copyright (c) 2013, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez. 
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style

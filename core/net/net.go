@@ -2,7 +2,7 @@
 //
 //  net.go
 //
-//  Copyright (c) 2013, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez. 
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -70,9 +70,9 @@ var (
 )
 
 // AccessProvider specifies the interface which network protocols will use
-// to authorize messages for sending or processing. All incoming and outgoing
-// messages flow through Authorize() and are immediately dropped if it returns
-// false.
+// to authorize messages for sending or processing. All incoming messages
+// flow through Authorize(). It is left to the individual MsgProcessors to
+// decide whether to check authorization for outgoing messages or not.
 type AccessProvider interface {
 	Authorize(con Connection) (byte, error)
 	Close()

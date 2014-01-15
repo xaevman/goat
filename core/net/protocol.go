@@ -2,7 +2,7 @@
 //
 //  protocol.go
 //
-//  Copyright (c) 2013, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez. 
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -15,6 +15,7 @@ package net
 // External imports.
 import (
 	"github.com/xaevman/goat/core/log"
+	"github.com/xaevman/goat/lib/perf"
 )
 
 // Stdlib imports.
@@ -23,6 +24,9 @@ import (
 	"fmt"
 	"sync"
 )
+
+// Protocol module name.
+const MODULE_PROTOCOL_NAME = "Protocol"
 
 // Perf counters.
 const (
@@ -57,7 +61,7 @@ type Protocol struct {
 	objMutex   sync.RWMutex
 	security   AccessProvider
 	sigMap     map[uint16]MsgProcessor
-	perfs      *PerfCounters
+	perfs      *perf.PerfCounters
 }
 
 // NewProtocol is a helper constructor function which creates a newly initialized
@@ -68,7 +72,7 @@ func NewProtocol(pName string) *Protocol {
 		cliMap: make(map[uint32]Connection, 0),
 		name:   pName,
 		sigMap: make(map[uint16]MsgProcessor, 0),
-		perfs:  NewPerfs(PERF_COUNT, perfNames),
+		perfs:  perf.NewPerfCounters(MODULE_PROTOCOL_NAME, PERF_COUNT, perfNames),
 	}
 
 	registerProtocol(&newProto)

@@ -2,7 +2,7 @@
 //
 //  all_test.go
 //
-//  Copyright (c) 2013, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez. 
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -163,6 +163,7 @@ func TestTCPSrv(t *testing.T) {
 	runSimpleTcpTest(100, 100,  t)
 	runSimpleTcpTest(100, 1000, t)
 
+	// shut everything down gracefully
 	proto.Shutdown()
 	srv.Stop()
 }
