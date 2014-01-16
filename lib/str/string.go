@@ -10,9 +10,9 @@
 //
 //  -----------
 
-// Package strutil contains helper functions for commonly useful string
+// Package str contains helper functions for commonly useful string
 // operations.
-package strutil
+package str
 
 import (
 	"bytes"

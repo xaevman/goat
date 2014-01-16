@@ -324,7 +324,6 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 	this.cliMutex.RUnlock()
 
 	if cli == nil {
-		panic("send")
 		return errors.New(fmt.Sprintf(
 			"sendMsg failed: Client %v doesn't exist.",
 			id,
@@ -336,7 +335,6 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 
 	sig := GetMsgSig(msg.Header)
 	if this.sigMap[sig] == nil {
-		panic("send")
 		return errors.New(fmt.Sprintf(
 			"Can't send a message for an unregistered message type " +
 			"signature (%v)",
@@ -346,7 +344,6 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 
 	if GetMsgCompressedFlag(msg.Header) {
 		if this.compressor == nil {
-			panic("send")
 			return errors.New(
 				"Compression bit set, but no CompressionProvider " +
 				"registered.",
@@ -355,7 +352,6 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 
 		err := this.compressor.Compress(msg)
 		if err != nil {
-			panic("send")
 			return errors.New(fmt.Sprintf(
 				"Error compressing data: %v", err,
 			))
@@ -364,7 +360,6 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 
 	if GetMsgEncryptedFlag(msg.Header) {
 		if this.crypto == nil {
-			panic("send")
 			return errors.New(
 				"Encryption bit set, but no CryptoProvider registered.",
 			)
@@ -372,7 +367,6 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 
 		err := this.crypto.Encrypt(msg)
 		if err != nil {
-			panic("send")
 			return errors.New(fmt.Sprintf(
 				"Error encrypting data: %v", err,
 			))

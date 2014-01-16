@@ -14,7 +14,7 @@ package net
 
 import (
 	"github.com/xaevman/goat/core/log"
-	"github.com/xaevman/goat/lib/strutil"
+	"github.com/xaevman/goat/lib/str"
 )
 
 import(
@@ -56,9 +56,6 @@ func (this *PingMsgProc) Close() {}
 func (this *PingMsgProc) Init(proto *Protocol) {
 	this.parent = proto
 }
-func (this *PingMsgProc) QueryReceiveMsg() <-chan interface{} {
-	return nil
-}
 func (this *PingMsgProc) ReceiveMsg(msg *Msg, access byte) error {
 	log.Debug(
 		"[%v->%v]: %v",
@@ -95,9 +92,6 @@ func (this *PongMsgProc) Close() {}
 func (this *PongMsgProc) Init(proto *Protocol) {
 	this.parent = proto
 }
-func (this *PongMsgProc) QueryReceiveMsg() <-chan interface{} {
-	return nil
-}
 func (this *PongMsgProc) ReceiveMsg(msg *Msg, access byte) error {
 	log.Debug(
 		"[%v->%v]: %v",
@@ -122,16 +116,6 @@ func (this *PongMsgProc) Signature() uint16 {
 }
 
 
-// Stand-in AccessController
-type AllAccess struct {}
-func (this *AllAccess) Authorize(con Connection) (byte, error) {
-	return 255, nil
-}
-func (this *AllAccess) Close() {}
-func (this *AllAccess) Init(proto *Protocol) {}
-
-
-
 // TestHeaderOpts runs all of the header set and get options on a variety 
 // of header message type signatures.
 func TestHeaderOps(t *testing.T) {
@@ -147,7 +131,7 @@ func TestTCPSrv(t *testing.T) {
 	// set up the protocol
 	proto.AddSignature(pingMsgProc)
 	proto.AddSignature(pongMsgProc)
-	proto.SetAccessProvider(new(AllAccess))
+	proto.SetAccessProvider(new(NoSecurity))
 
 	// fire up the tcp server
 	srv := NewTCPSrv()
@@ -231,7 +215,7 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 // messages at semi-random intervals.
 func runClient(cli *TCPCli, sendCount int, doneChan chan bool, t *testing.T) {
 	for i := 0; i < sendCount; i++ {
-		pingMsgProc.SendMsg(cli.srv.id, pingTxt)
+		pingMsgProc.SendMsg(cli.Socket().Id(), pingTxt)
 		atomic.AddUint64(&msgCount, 1)
 
 		// simulate a normal amount of internet latency
@@ -287,7 +271,7 @@ func testHeaders(i uint16, t *testing.T) {
 	if rtMsgType != msgType {
 		t.Fatalf("Roundtrip msgType: %v != %v\n", rtMsgType, msgType)
 	}
-	if !strutil.StrEq(rtPayload, text) {
+	if !str.StrEq(rtPayload, text) {
 		t.Fatalf("Roundtrip payload: %v != %v\n", rtPayload, text)
 	}
 

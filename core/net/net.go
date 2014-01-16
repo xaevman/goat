@@ -119,7 +119,6 @@ type CryptoProvider interface {
 type MsgProcessor interface {
 	Close()
 	Init(proto *Protocol)
-	QueryReceiveMsg() <-chan interface{}
 	ReceiveMsg(msg *Msg, access byte) error
 	SendMsg(targetId uint32, data interface{}) error
 	Signature() uint16

@@ -19,24 +19,33 @@ import (
 	"sync/atomic"
 )
 
+// Send distribution schemes.
+const (
+	BROADCAST = iota
+	ROUND_ROBIN
+)
+
 // ConnectionGroup represents a group of Connections, and itself implements 
 // the Connection interface so that it can be used interchangebly with single
 // Connection objects.
 type ConnectionGroup struct {
-	conList map[uint32]Connection
-	id      uint32
-	key     string
-	mutex   sync.RWMutex
-	name    string
+	conList     []Connection
+	id          uint32
+	key         string
+	lastIndex   int
+	mutex       sync.RWMutex
+	name        string
+	routeScheme int
 }
 
 // NewConnectionGroup is a constructor helper which builds a newly initalized 
 // instance of ConnectionGroup and returns a pointer to it for use.
-func NewConnectionGroup(name string) *ConnectionGroup {
+func NewConnectionGroup(name string, scheme int) *ConnectionGroup {
 	conGroup := ConnectionGroup {
-		conList: make(map[uint32]Connection, 0),
-		id:      atomic.AddUint32(&netId, 1),
-		name:    name,
+		conList:     make([]Connection, 0),
+		id:          atomic.AddUint32(&netId, 1),
+		name:        name,
+		routeScheme: scheme,
 	}
 
 	return &conGroup
@@ -47,7 +56,7 @@ func (this *ConnectionGroup) AddConnection(con Connection) {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	this.conList[con.Id()] = con
+	this.conList = append(this.conList, con)
 }
 
 // Close removes all Connection objects from the group, after calling Close()
@@ -56,10 +65,11 @@ func (this *ConnectionGroup) Close() {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	for key, _ := range this.conList {
-		this.conList[key].Close()
-		delete(this.conList, key)
+	for i := range this.conList {
+		this.conList[i].Close()
 	}
+
+	this.conList = make([]Connection, 0)
 }
 
 // Id returns the net ID for this ConnectionGroup.
@@ -87,18 +97,44 @@ func (this *ConnectionGroup) RemoveConnection(con Connection) {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	delete(this.conList, con.Id())
+	for i := range this.conList {
+		if this.conList[i] == con {
+			this.conList[i] = nil
+			this.conList    = append(
+				this.conList[:i], 
+				this.conList[i + 1:]...,
+			)
+		}
+	}
 }
 
-// Send transmits a slice of bytes to all member Connections in the
-// ConnectionGroup.
-func (this *ConnectionGroup) Send(data []byte) error {
+// Send transmits a slice of bytes to member Connections in the
+// ConnectionGroup based on the current routing scheme.
+func (this *ConnectionGroup) Send(data []byte) {
 	this.mutex.RLock()
 	this.mutex.RUnlock()
 
-	for _, con := range this.conList {
-		con.Send(data)
+	switch this.routeScheme {
+		case BROADCAST:
+			for i := range this.conList {
+				this.conList[i].Send(data)
+			}
+		case ROUND_ROBIN:
+			this.conList[this.nextConIndex()].Send(data)
 	}
+}
 
-	return nil
+// nextConIndex increments the currenct connection index, looping through
+// all values and resetting back to zero at the end of the list.
+func (this *ConnectionGroup) nextConIndex() int {
+	this.mutex.RLock()
+	defer this.mutex.RUnlock()
+
+	this.lastIndex++
+
+	if this.lastIndex >= len(this.conList) {
+		this.lastIndex = 0
+	} 
+
+	return this.lastIndex
 }

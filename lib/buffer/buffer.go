@@ -10,17 +10,73 @@
 //
 //  -----------
 
+// Package buffer contains helper functions for writing and reading basic
+// types into and out of byte slices.
 package buffer
 
+const (
+	BYTE_SIZE   = 1
+	UINT8_SIZE  = 1
+	UINT16_SIZE = 2
+	UINT32_SIZE = 4
+	UINT64_SIZE = 8
+)
 
+// LenByte returns the encoded length of a byte value.
+func LenByte() int {
+	return BYTE_SIZE
+}
+
+// LenString returns the encoded length of a given string, including 
+// the extra bytes required to encode its size.
+func LenString(val string) int {
+	return len(val) + LenUint32()
+}
+
+// LenUint8 returns the lengh of a uint32 value.
+func LenUint8() int {
+	return UINT8_SIZE
+}
+
+// LenUint16 returns the lengh of a uint32 value.
+func LenUint16() int {
+	return UINT16_SIZE
+}
+
+// LenUint32 returns the lengh of a uint32 value.
+func LenUint32() int {
+	return UINT32_SIZE
+}
+
+// LenUint64 returns the encoded length of a uint64 value.
+func LenUint64() int {
+	return UINT64_SIZE
+}
+
+// ReadByte reads 1 byte value from the given buffer, starting at
+// the given offset, and increments teh supplied cursor by the length
+// of the encoded value.
+func ReadByte(buffer []byte, cursor *int) byte {
+	val := buffer[*cursor]
+	*cursor++
+
+	return val
+}
+
+// ReadString reads 1 string value from the given buffer, starting at
+// the given offset, and increments teh supplied cursor by the length
+// of the encoded value.
 func ReadString(buffer []byte, cursor *int) string {
-	size    := ReadUint64(buffer, cursor)
+	size    := ReadUint32(buffer, cursor)
 	val     := string(buffer[*cursor:*cursor + int(size)])
 	*cursor += len(val)
 
 	return val
 }
 
+// ReadUint32 reads 1 uint32 value from the given buffer, starting at
+// the given offset, and increments teh supplied cursor by the length
+// of the encoded value.
 func ReadUint32(buffer []byte, cursor *int) uint32 {
 	val := 
 		uint32(buffer[*cursor])     << 24 | 
@@ -28,11 +84,14 @@ func ReadUint32(buffer []byte, cursor *int) uint32 {
 		uint32(buffer[*cursor + 2]) <<  8 |
 		uint32(buffer[*cursor + 3])
 
-	*cursor += 4
+	*cursor += UINT32_SIZE
 
 	return val
 }
 
+// ReadUint64 reads 1 uint64 value from the given buffer, starting at
+// the given offset, and increments teh supplied cursor by the length
+// of the encoded value.
 func ReadUint64(buffer []byte, cursor *int) uint64 {
 	val := 
 		uint64(buffer[*cursor])     << 56 | 
@@ -44,18 +103,32 @@ func ReadUint64(buffer []byte, cursor *int) uint64 {
 		uint64(buffer[*cursor + 6]) <<  8 |
 		uint64(buffer[*cursor + 7])
 
-	*cursor += 8
+	*cursor += UINT64_SIZE
 
 	return val
 }
 
+// WriteByte writes the given byte value into a buffer at the given
+// offset and increments the supplied cursor by the length of the encoded
+// value.
+func WriteByte(val byte, buffer []byte, cursor *int) {
+	buffer[*cursor] = val
+	*cursor++
+}
+
+// WriteString writes the given string value into a buffer starting at
+// the given offset, and increments the supplied counter by the length 
+// of that encoded string.
 func WriteString(val string, buffer []byte, cursor *int) {
-	WriteUint64(uint64(len(val)), buffer, cursor)
+	WriteUint32(uint32(len(val)), buffer, cursor)
 
 	count   := copy(buffer[*cursor:], []byte(val))
 	*cursor += count
 }
 
+// WriteUint32 writes the given uint32 value into a buffer at the given
+// offset and increments the supplied cursor by the lengh of the encoded
+// value.
 func WriteUint32(val uint32, buffer []byte, cursor *int) {
 	buffer[*cursor] = byte(val >> 24); *cursor++
 	buffer[*cursor] = byte(val >> 16); *cursor++
@@ -63,6 +136,9 @@ func WriteUint32(val uint32, buffer []byte, cursor *int) {
 	buffer[*cursor] = byte(val);       *cursor++
 }
 
+// WriteUint64 writes the given uint64 value into a buffer at the given
+// offset and increments teh supplied cursor by the length of the encoded
+// value.
 func WriteUint64(val uint64, buffer []byte, cursor *int) {
 	buffer[*cursor] = byte(val >> 56); *cursor++
 	buffer[*cursor] = byte(val >> 48); *cursor++

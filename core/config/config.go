@@ -18,7 +18,7 @@ package config
 
 // External imports.
 import (
-	"github.com/xaevman/goat/lib/strutil"
+	"github.com/xaevman/goat/lib/str"
 	"github.com/xaevman/goat/core/log"
 )
 
@@ -478,7 +478,7 @@ func (this *ConfigEntry) String() string {
 		"%v::%v = %v", 
 		this.parser.Name(),
 		this.key,
-		strutil.StrArrayToCsv(this.vals),
+		str.StrArrayToCsv(this.vals),
 	)
 }
 

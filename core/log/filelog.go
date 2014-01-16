@@ -13,7 +13,7 @@
 package log
 
 import (
-    "github.com/xaevman/goat/lib/fsutil"
+    "github.com/xaevman/goat/lib/fs"
     "github.com/xaevman/goat/lib/lifecycle"
     "os"
     "path/filepath"
@@ -142,7 +142,7 @@ func (this *FileLog) flushLogs() {
 // Once signaled for shutdown, init flushes all remaining logs, closes the files
 // and signals its completion.
 func (this *FileLog) init() {
-    fsutil.Mkdir(DEFAULT_LOG_DIR, 0755)
+    fs.Mkdir(DEFAULT_LOG_DIR, 0755)
 
     this.crashFile = this.initLog(CRASH_LOG_NAME)
     this.debugFile = this.initLog(DEBUG_LOG_NAME)
@@ -177,7 +177,7 @@ func (this *FileLog) init() {
 
 // initLog opens or creates a given log file for append access.
 func (this *FileLog) initLog(filePath string) *os.File {
-    file, err := fsutil.AppendFile(filepath.Join(DEFAULT_LOG_DIR, filePath))
+    file, err := fs.AppendFile(filepath.Join(DEFAULT_LOG_DIR, filePath))
     if err != nil {
         Error("Unable to initialize log file %v", filePath)
         this.Shutdown()

@@ -10,7 +10,7 @@
 //
 //  -----------
 
-package strutil
+package str
 
 import(
 	"log"

@@ -14,8 +14,8 @@ package config
 
 // External imports.
 import (
-	"github.com/xaevman/goat/lib/fsutil"
-	"github.com/xaevman/goat/lib/strutil"
+	"github.com/xaevman/goat/lib/fs"
+	"github.com/xaevman/goat/lib/str"
 	"github.com/xaevman/goat/core/log"
 )
 
@@ -35,7 +35,7 @@ const INI_MOD_NAME = "IniProvider"
 // give path, registers it with the conig service, and returns a 
 // pointer to the object for direct use, if required.
 func InitIniProvider(path string, pri int) *IniProvider {
-	exists, info := fsutil.FileExists(path)
+	exists, info := fs.FileExists(path)
 	if !exists{
 		log.Error("Config file doesn't exist %v", path)
 		return nil
@@ -157,7 +157,7 @@ func (this *IniProvider) newEntry(section, line string) {
 	}
 
 	keyName := fmt.Sprintf("%v.%v", section, strings.TrimSpace(pair[0]))
-	valList := strutil.DelimToStrArray(pair[1], ",")
+	valList := str.DelimToStrArray(pair[1], ",")
 
 	cfgEntry := ConfigEntry {
 		key: keyName,
@@ -177,7 +177,7 @@ func (this *IniProvider) newEntry(section, line string) {
 // parseConfig opens a given ini config file and Marshals it into an IniProvider
 // object representation.
 func (this *IniProvider) parseConfig() error {
-	file, err := fsutil.OpenFile(this.filePath)
+	file, err := fs.OpenFile(this.filePath)
 	if err != nil {
 		return err
 	}

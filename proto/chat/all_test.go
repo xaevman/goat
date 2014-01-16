@@ -23,18 +23,19 @@ import (
 	"testing"
 )
 
-// TestChatMsg tests serialization/deserialization of ChatMsg objects.
-func TestChatMsgSerialize(t *testing.T) {
-	cm := ChatMsg {
+// TestMsg tests serialization/deserialization of Msg objects.
+func TestMsgSerialize(t *testing.T) {
+	cm := Msg {
 		ChannelId: 10,
 		From:      "Jared",
 		FromId:    12345,
+		Subtype:   MSG_SUB_CHAT,
 		ToId:      54321,
 		Text:      "This is my test message! Rawr",
 	}
 
-	b     := SerializeChatMsg(&cm)
-	newCm := DeserializeChatMsg(b)
+	b     := SerializeMsg(&cm)
+	newCm := DeserializeMsg(b)
 
 	if cm.ChannelId != newCm.ChannelId {
 		t.Fatalf(
@@ -60,6 +61,14 @@ func TestChatMsgSerialize(t *testing.T) {
 		)
 	}
 
+	if cm.Subtype != newCm.Subtype {
+		t.Fatalf(
+			"Subtype mismatch: %v != %v\n",
+			cm.Subtype,
+			newCm.Subtype,
+		)
+	}
+
 	if cm.ToId != newCm.ToId {
 		t.Fatalf(
 			"To Ids do not match: %v != %v\n",
@@ -76,5 +85,5 @@ func TestChatMsgSerialize(t *testing.T) {
 		)
 	}
 
-	log.Printf("TestChatMsgSerialize: passed")
+	log.Printf("TestMsgSerialize: passed")
 }

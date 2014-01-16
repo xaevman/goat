@@ -14,7 +14,7 @@ package math
 
 // External imports.
 import (
-	"github.com/xaevman/goat/lib/strutil"
+	"github.com/xaevman/goat/lib/str"
 )
 
 // Stdlib imports.
@@ -143,7 +143,7 @@ func TestStats(t *testing.T) {
 			fmt.Printf(
 				"\n========\nset %v :: %v\n",
 				resCounter,
-				strutil.IntArrayToList(statSeries[min:i + 1], ","),
+				str.IntArrayToList(statSeries[min:i + 1], ","),
 			)
 
 			printStats(i, s)

@@ -30,7 +30,7 @@ func TestDiag(t *testing.T) {
 	log.Println()
 	log.Println()
 
-	json := FmtDiagJson(e)
+	json := AsJson(e)
 	log.Println("AsJson ******************************")
 	log.Println(json)
 }

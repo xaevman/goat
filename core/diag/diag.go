@@ -15,7 +15,7 @@
 package diag
 
 import (
-	"github.com/xaevman/goat/lib/strutil"
+	"github.com/xaevman/goat/lib/str"
 )
 
 // Stdlib imports.
@@ -73,7 +73,7 @@ func New(err interface{}) *DiagData {
 	}
 
 	for _, v := range env {
-		envParts := strutil.DelimToStrArray(v, "=")
+		envParts := str.DelimToStrArray(v, "=")
 		envData.Vars[envParts[0]] = envParts[1]
 	}
 

@@ -14,7 +14,7 @@ package config
 
 // External imports
 import (
-	"github.com/xaevman/goat/lib/strutil"
+	"github.com/xaevman/goat/lib/str"
 )
 
 // Stdlib imports
@@ -89,7 +89,7 @@ func (this *EnvProvider) Shutdown() {}
 // newEnvEntry creates a ConfigEntry object, populates it with values
 // from the system environment, and returns a pointer to the object for use.
 func newEnvEntry(name, val string, parent *EnvProvider) *ConfigEntry {
-	valList := strutil.DelimToStrArray(val, string(os.PathListSeparator))
+	valList := str.DelimToStrArray(val, string(os.PathListSeparator))
 	entry   := ConfigEntry {
 		key:    name,
 		parser: parent,

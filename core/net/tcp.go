@@ -37,7 +37,7 @@ type TCPCli struct {
 	discoChan  chan *tcpCon
 	id         uint32
 	mutex      sync.Mutex
-	srv        *tcpCon
+	srvSocket  *tcpCon
 	syncObj    *lifecycle.Lifecycle
 }
 
@@ -72,7 +72,7 @@ func (this *TCPCli) Dial(addr string) error {
 		writeChan: make(chan []byte),
 	}
 
-	this.srv = &tCon
+	this.srvSocket = &tCon
 
 	onConnect(&tCon)
 
@@ -97,10 +97,14 @@ func (this *TCPCli) Dial(addr string) error {
 // Shutdown closes the TCPCli's existing socket as well as all of the
 // client's go routines.
 func (this *TCPCli) Shutdown() {
-	this.srv.Close()
+	this.srvSocket.Close()
 	this.syncObj.Shutdown()
 }
 
+// Socket returns the socket which is open to the remote server.
+func (this *TCPCli) Socket() *tcpCon {
+	return this.srvSocket
+}
 
 // TCPSrv represents a TCP server object. The server object handles basic
 // communications, client synchronization, and error handling. Client code
