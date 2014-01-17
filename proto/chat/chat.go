@@ -38,6 +38,9 @@ const (
 	MSG_SUB_CHAT = iota
 	MSG_SUB_CMD
 	MSG_SUB_CONNECT
+	MSG_SUB_JOIN_CHANNEL
+	MSG_SUB_LEAVE_CHANNEL
+	MSG_SUB_SET_NAME
 )
 
 
@@ -48,12 +51,28 @@ const (
 // ToID is the NetID of the message recipient. Text is the actual text of 
 // the message.
 type Msg struct {
+	Access    byte
 	ChannelId uint32
 	From      string
 	FromId    uint32
 	Subtype   byte
 	ToId      uint32
 	Text      string
+}
+
+// Duplicate creates a copy of the given message and returns a pointer
+// to it for use.
+func (this *Msg) Duplicate() *Msg {
+	newMsg          := new(Msg)
+	newMsg.Access    = this.Access
+	newMsg.ChannelId = this.ChannelId
+	newMsg.From      = this.From
+	newMsg.FromId    = this.FromId
+	newMsg.Subtype   = this.Subtype
+	newMsg.ToId      = this.ToId
+	newMsg.Text      = this.Text
+
+	return newMsg
 }
 
 // DeserializeMsg takes serialized data and creates a new Msg object
@@ -107,7 +126,7 @@ type MsgHandler struct {
 // Close is a no-op for MsgHandler
 func (this *MsgHandler) Close() {}
 
-// Init saves the reference to the parent protocol and initiales the
+// Init saves the reference to the parent protocol and initializes the
 // receive channel for use.
 func (this *MsgHandler) Init(proto *net.Protocol) {
 	this.parent  = proto
@@ -126,6 +145,7 @@ func (this *MsgHandler) QueryReceiveMsg() <-chan *Msg {
 // which can be queried via QueryReceiveMsg().
 func (this *MsgHandler) ReceiveMsg(msg *net.Msg, access byte) error {
 	chatMsg       := DeserializeMsg(msg.Data)
+	chatMsg.Access = access
 	chatMsg.FromId = msg.Con.Id()
 
 	this.rcvChan<- chatMsg
@@ -142,7 +162,7 @@ func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
 		return errors.New("Non chat.Msg object received")
 	}
 
-	dataBuffer := SerializeMsg(data.(*Msg))
+	dataBuffer := SerializeMsg(msgObj)
 	netMsg     := net.Msg {
 		Data:   dataBuffer,
 		Header: this.Signature(),
@@ -151,6 +171,7 @@ func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
 	return this.parent.SendMsg(targetId, &netMsg)
 }
 
+// Signature returns CHAT_MSG.
 func (this *MsgHandler) Signature() uint16 { 
 	return CHAT_MSG 
 }

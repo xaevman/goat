@@ -83,6 +83,10 @@ func NewProtocol(pName string) *Protocol {
 // AddSig registers a message type signature and its associated message processing
 // object with this protocol.
 func (this *Protocol) AddSignature(proc MsgProcessor) {
+	if proc == nil {
+		return
+	}
+
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -103,6 +107,10 @@ func (this *Protocol) AddSignature(proc MsgProcessor) {
 // DeleteSig removes a message type signature and its associated message processing
 // object if one exists.
 func (this *Protocol) DeleteSignature(proc MsgProcessor) {
+	if proc == nil {
+		return
+	}
+
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -122,9 +130,54 @@ func (this *Protocol) DeleteSignature(proc MsgProcessor) {
 	unregisterSignature(proc.Signature(), this)
 }
 
+// GetConnection queries the protocol's list of registered connections and
+// returns the one matching the supplied NetId, otherwise it returns nil.
+func (this *Protocol) GetConnection(id uint32) Connection {
+	this.cliMutex.RLock()
+	defer this.cliMutex.RUnlock()
+
+	return this.cliMap[id]
+}
+
+// RegisterConnection registers a new connection object with this protocol.
+// Connections which attempt to send messages that are a part of this
+// protocol will auto-register, but RegisterConnection provides a manual way
+// of adding Connection objects or ConnectionGroups as clients of the protocol.
+func (this *Protocol) RegisterConnection(con Connection) {
+	if con == nil {
+		return
+	}
+
+	this.cliMutex.Lock()
+	defer this.cliMutex.Unlock()
+
+	if this.cliMap[con.Id()] != nil {
+		log.Error(
+			"Connection already registered (%v), aborting registration",
+			con.Id(),
+		)
+		return
+	}
+
+	this.cliMap[con.Id()] = con
+}
+
+// SendMsg transmits the supplied message to the target connection Id.
+func (this *Protocol) SendMsg(id uint32, msg *Msg) error {
+	if msg == nil {
+		return nil
+	}
+
+	return this.sendMsg(id, msg)
+}
+
 // SetAccessProvider sets the AccessProvider object responsible for authorizing
 // messages and clients on this protocol.
 func (this *Protocol) SetAccessProvider(provider AccessProvider) {
+	if provider == nil {
+		return
+	}
+
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -140,6 +193,10 @@ func (this *Protocol) SetAccessProvider(provider AccessProvider) {
 // handling compression and decompression of messages passing through the
 // protocol.
 func (this *Protocol) SetCompressionProvider(provider CompressionProvider) {
+	if provider == nil {
+		return
+	}
+	
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -154,6 +211,10 @@ func (this *Protocol) SetCompressionProvider(provider CompressionProvider) {
 // SetCryptoProvider sets the CryptoProvider object responsible for
 // handling encryption/decryption of messages passing through the protocol.
 func (this *Protocol) SetCryptoProvider(provider CryptoProvider) {
+	if provider == nil {
+		return
+	}
+	
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -224,11 +285,6 @@ func (this *Protocol) onDisconnect(con Connection) {
 	delete(this.cliMap, con.Id())
 
 	log.Debug("Connection %v unregistered from Proto %v", con.Id(), this.name)
-}
-
-// SendMsg transmits the supplied message to the target connection Id.
-func (this *Protocol) SendMsg(id uint32, msg *Msg) error {
-	return this.sendMsg(id, msg)
 }
 
 // rcvMsg is the message pipeline for incoming messages. First, the protocol

@@ -113,6 +113,12 @@ type CryptoProvider interface {
 	Init(proto *Protocol)
 }
 
+// DisconnectHandler specifies the interface which TCP clients and servers
+// will use to notify subscribers of disconnection events.
+type DisconnectHandler interface {
+	Notify(id uint32)
+}
+
 // MsgProcessor specifies the entry and exit points of the network system which
 // network protcols use to accept and distribute incoming messages as well as
 // accept and disseminate outgoing messages to the correct endpoints.

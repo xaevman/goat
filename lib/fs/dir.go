@@ -51,11 +51,11 @@ func Mkdir(path string, perm os.FileMode) error {
 
 // NewSearchDir is a helper function which returns a pointer to a new SearchDir
 // object with the Err and File channels set to the specified buffer sizes.
-func NewSearchDir(errBuffers, fileBuffers int) *SearchDir {
+func NewSearchDir() *SearchDir {
 	newObj := SearchDir {
 		DoneChan: make(chan bool),
-		ErrChan:  make(chan string, errBuffers),
-		FileChan: make(chan string, fileBuffers),
+		ErrChan:  make(chan string),
+		FileChan: make(chan string),
 	}
 
 	return &newObj

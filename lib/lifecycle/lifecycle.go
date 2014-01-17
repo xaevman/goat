@@ -16,8 +16,20 @@ package lifecycle
 
 // Stdlib imports.
 import (
+	"sync"
 	"time"
 )
+
+// Lifecycle provides a simple way to coordinate the lifecycle of
+// worker goroutines that loop infinitely
+type Lifecycle struct {
+	run           bool
+	heartbeatChan chan bool
+	heartbeatDur  time.Duration
+	lock          sync.RWMutex
+	shutdownChan  chan bool
+	waitChan      chan bool
+}
 
 // New is a helper function which creates a newly initialized Lifecycle
 // object and returns a pointer to it for use.
@@ -33,16 +45,6 @@ func New() *Lifecycle {
 	return &newObj
 }
 
-// Lifecycle provides a simple way to coordinate the lifecycle of
-// worker goroutines that loop infinitely
-type Lifecycle struct {
-	run           bool
-	heartbeatChan chan bool
-	heartbeatDur  time.Duration
-	shutdownChan  chan bool
-	waitChan      chan bool
-}
-
 // QueryHeartbeat returns the read-only channel on which a user should
 // listen for a periodic heartbeat signal.
 func (this *Lifecycle) QueryHeartbeat() <-chan bool {
@@ -53,6 +55,9 @@ func (this *Lifecycle) QueryHeartbeat() <-chan bool {
 // true until Shutdown() is called. Client code can use this function as
 // their criteria in a typical for-select work loop.
 func (this *Lifecycle) QueryRun() bool {
+	this.lock.RLock()
+	defer this.lock.RUnlock()
+
 	return this.run
 }
 
@@ -66,12 +71,18 @@ func (this *Lifecycle) QueryShutdown() <-chan bool {
 // to the client on the shutdown channel, and then blocks until the client
 // calls ShutdownComplete()
 func (this *Lifecycle) Shutdown() {
+	this.lock.Lock()
+
 	if !this.run {
+		this.lock.Unlock()
 		return
 	}
 
 	this.StopHeart()
 	this.run = false
+	
+	this.lock.Unlock()
+
 	close(this.shutdownChan)
 	<-this.waitChan
 }
@@ -99,9 +110,12 @@ func (this *Lifecycle) StopHeart() {
 // channel and schedules the next heartbeat for heartbeatMs milliseconds in 
 // the future. If heartbeatMs is less than 1, the heartbeat is disabled.
 func (this *Lifecycle) heartbeat() {
-	if this.heartbeatDur == 0 {
+	this.lock.RLock()
+	if !this.run || this.heartbeatDur == 0 {
+		this.lock.RUnlock()
 		return
 	}
+	this.lock.RUnlock()
 
 	this.heartbeatChan<- true
 

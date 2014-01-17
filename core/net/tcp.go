@@ -35,8 +35,9 @@ const TCP_BUFFER_SIZE_B = 512 // KB * B
 // objects.
 type TCPCli struct {
 	discoChan  chan *tcpCon
+	discoEvt   DisconnectHandler
 	id         uint32
-	mutex      sync.Mutex
+	mutex      sync.RWMutex
 	srvSocket  *tcpCon
 	syncObj    *lifecycle.Lifecycle
 }
@@ -83,6 +84,11 @@ func (this *TCPCli) Dial(addr string) error {
 			select {
 			case srv := <-this.discoChan:
 				onDisconnect(srv)
+				this.mutex.RLock()
+				if this.discoEvt != nil {
+					go this.discoEvt.Notify(srv.Id())
+				}
+				this.mutex.RUnlock()
 			case <-this.syncObj.QueryShutdown():
 				log.Info("Shutting down TCPCli %v", this.id)
 			}
@@ -92,6 +98,24 @@ func (this *TCPCli) Dial(addr string) error {
 	}()
 
 	return nil
+}
+
+// RegisterDiscoHandler registers a new DisconnectHandler object with the
+// TCPCli instance.
+func (this *TCPCli) RegisterDiscoHandler(handler DisconnectHandler) {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
+	this.discoEvt = handler
+}
+
+// RemoveDiscoHandler removes the registered DisconnectHandler from this
+// TCPCli instance.
+func (this *TCPCli) RemoveDiscoHandler() {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
+	this.discoEvt = nil
 }
 
 // Shutdown closes the TCPCli's existing socket as well as all of the
@@ -106,12 +130,14 @@ func (this *TCPCli) Socket() *tcpCon {
 	return this.srvSocket
 }
 
+
 // TCPSrv represents a TCP server object. The server object handles basic
 // communications, client synchronization, and error handling. Client code
 // only establishes a server listener via the server object. Sending and receiving
 // messages is done via Protocol objects registered with the net service.
 type TCPSrv struct {
 	discoChan  chan *tcpCon
+	discoEvt   DisconnectHandler
 	cliMap     map[uint32]*tcpCon
 	id         uint32
 	listener   net.Listener
@@ -130,6 +156,24 @@ func NewTCPSrv() *TCPSrv {
 	}
 
 	return &srv
+}
+
+// RegisterDiscoHandler registers a new DisconnectHandler object with the
+// TCPCli instance.
+func (this *TCPSrv) RegisterDiscoHandler(handler DisconnectHandler) {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
+	this.discoEvt = handler
+}
+
+// RemoveDiscoHandler removes the registered DisconnectHandler from this
+// TCPCli instance.
+func (this *TCPSrv) RemoveDiscoHandler() {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
+	this.discoEvt = nil
 }
 
 // Start initializes and starts the TCP server in a new goroutine, 
@@ -151,10 +195,12 @@ func (this *TCPSrv) Start(addr string) {
 			select {
 			case cli := <-this.discoChan:
 				onDisconnect(cli)
-
-				this.mutex.Lock()
-				delete(this.cliMap, cli.id)
-				this.mutex.Unlock()
+				this.mutex.RLock()
+				if this.discoEvt != nil {
+					go this.discoEvt.Notify(cli.Id())
+				}
+				this.mutex.RUnlock()
+				go this.removeClient(cli.Id())
 			case <-this.syncObj.QueryShutdown():
 				log.Info("Shutting down TCPSrv %v", addr)
 			}
@@ -166,12 +212,11 @@ func (this *TCPSrv) Start(addr string) {
 
 // Stop shuts the TCP server down.
 func (this *TCPSrv) Stop() {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
-
+	this.mutex.RLock()
 	for _, cli := range this.cliMap {
 		cli.Close()
 	}
+	this.mutex.RUnlock()
 
 	this.syncObj.Shutdown()
 }
@@ -202,6 +247,14 @@ func (this *TCPSrv) acceptConnections() {
 
 		cli.startHandlers()
 	}
+}
+
+// removeClient removes a client from the map of this server's clients.
+func (this *TCPSrv) removeClient(id uint32) {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
+	delete(this.cliMap, id)
 }
 
 
@@ -292,7 +345,9 @@ func (this *tcpCon) handleReads() {
 		}
 
 		// received data
-		this.readChan<- buffer[:count]
+		cpBuffer := make([]byte, count)
+		copy(cpBuffer, buffer[:count])
+		this.readChan<- cpBuffer
 
 		// a real error
 		if err != nil {
@@ -326,6 +381,16 @@ func (this *tcpCon) handleWrites() {
 	}
 }
 
+// notifyDisco bubbles a disco event up to the tcpCon's parent TCPSrv so 
+// that it can properly handle the client's disconnection.
+func (this *tcpCon) notifyDisco() {
+	this.syncObj.Shutdown()
+
+	if this.discoChan != nil {
+		this.discoChan<- this
+	}
+}
+
 // runCli runs in its own goroutine, handling read events that bubble up
 // from the handleReads goroutine, building message objects, and sending them
 // up the pipeline to registered protocols. runCli is also responsible for 
@@ -345,16 +410,6 @@ func (this *tcpCon) runCli() {
 	this.Close()
 
 	this.syncObj.ShutdownComplete()
-}
-
-// notifyDisco bubbles a disco event up to the tcpCon's parent TCPSrv so 
-// that it can properly handle the client's disconnection.
-func (this *tcpCon) notifyDisco() {
-	this.syncObj.Shutdown()
-
-	if this.discoChan != nil {
-		this.discoChan<- this
-	}
 }
 
 // startHandlers starts the 3 goroutines responsible for handling IO and 

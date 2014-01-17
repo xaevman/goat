@@ -53,6 +53,19 @@ func NewConnectionGroup(name string, scheme int) *ConnectionGroup {
 
 // AddConnection adds a new Connection object to this group.
 func (this *ConnectionGroup) AddConnection(con Connection) {
+	if con == nil {
+		return
+	}
+
+	this.mutex.RLock()
+	for i := range this.conList {
+		if this.conList[i] == con {
+			this.mutex.RUnlock()
+			return
+		}
+	}
+	this.mutex.RUnlock()
+
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
@@ -87,18 +100,22 @@ func (this *ConnectionGroup) LocalAddr() net.Addr {
 	return nil
 }
 
+func (this *ConnectionGroup) Name() string {
+	return this.name
+}
+
 // RemoteAddr always returns nil for a ConnectionGroup.
 func (this *ConnectionGroup) RemoteAddr() net.Addr {
 	return nil
 }
 
 // RemoveConnection removes a connection from the ConnectionGroup.
-func (this *ConnectionGroup) RemoveConnection(con Connection) {
+func (this *ConnectionGroup) RemoveConnection(id uint32) {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	for i := range this.conList {
-		if this.conList[i] == con {
+	for i := 0; i < len(this.conList); i++ {
+		if this.conList[i].Id() == id {
 			this.conList[i] = nil
 			this.conList    = append(
 				this.conList[:i], 
@@ -111,8 +128,12 @@ func (this *ConnectionGroup) RemoveConnection(con Connection) {
 // Send transmits a slice of bytes to member Connections in the
 // ConnectionGroup based on the current routing scheme.
 func (this *ConnectionGroup) Send(data []byte) {
+	if data == nil {
+		return
+	}
+	
 	this.mutex.RLock()
-	this.mutex.RUnlock()
+	defer this.mutex.RUnlock()
 
 	switch this.routeScheme {
 		case BROADCAST:
