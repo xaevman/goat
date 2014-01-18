@@ -19,6 +19,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sync"
 )
 
 // ANSI set mode flags.
@@ -61,6 +62,9 @@ var (
 	SET_BOLD        = ESC_CHAR + "[1m"
 )
 
+// Synchronization helpers.
+var mutex sync.Mutex
+
 // Style represents a console output format used by 
 // WriteFmt() and WriteLineFmt().
 type Style struct {
@@ -71,11 +75,17 @@ type Style struct {
 
 // ClearFormat sets console formatting back to default.
 func ClearFormat() {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	fmt.Fprint(os.Stdout, CLEAR_FORMAT)
 }
 
 // ClearScreen clears the console screen.
 func ClearScreen() {
+	mutex.Lock()
+	defer mutex.Unlock()
+	
 	fmt.Fprint(os.Stdout, CLEAR_SCREEN)
 }
 
@@ -112,6 +122,9 @@ func SetBackColor(flag int) {
 		return
 	}
 
+	mutex.Lock()
+	defer mutex.Unlock()
+	
 	fmt.Fprintf(
 		os.Stdout,
 		"%s[%vm",
@@ -122,6 +135,9 @@ func SetBackColor(flag int) {
 
 // SetBold sets the bold flag starting at the current cursor position.
 func SetBold() {
+	mutex.Lock()
+	defer mutex.Unlock()
+	
 	fmt.Fprint(os.Stdout, SET_BOLD)
 }
 
@@ -132,6 +148,9 @@ func SetForeColor(flag int) {
 		return
 	}
 
+	mutex.Lock()
+	defer mutex.Unlock()
+	
 	fmt.Fprintf(
 		os.Stdout,
 		"%s[%vm",
@@ -142,6 +161,9 @@ func SetForeColor(flag int) {
 
 // Write writes the supplied text, as is, to the console.
 func Write(text string) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	
 	fmt.Fprint(os.Stdout, text)
 }
 
@@ -164,6 +186,9 @@ func WriteFmt(text string, style Style) {
 // WriteLine writes the supplied text, terminated with a newline, to 
 // the console.
 func WriteLine(text string) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	
 	fmt.Fprint(os.Stdout, text + "\n")
 }
 

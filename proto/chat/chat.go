@@ -43,6 +43,11 @@ const (
 	MSG_SUB_SET_NAME
 )
 
+// Channel constants.
+const (
+	PUB_CHANNEL = "public"
+)
+
 
 // Msg represents a message sent from one client to the chat system.
 // ChannelId is the channel that the message is being sent to. From is the 

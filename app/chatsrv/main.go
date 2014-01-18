@@ -23,12 +23,13 @@ import (
 // Stdlib imports.
 import (
 	"fmt"
+	"os"
+	"strings"
 )
 
 // Network objects.
 var (
 	discoHandler = net.NewDisconnectChan()
-	pubChan 	 = net.NewConnectionGroup("public", net.BROADCAST)
 	msgProc 	 = new(chat.MsgHandler)
 	proto		 = net.NewProtocol("Chat")
 	srv			 = net.NewTCPSrv()
@@ -40,22 +41,25 @@ var syncObj = lifecycle.New()
 
 // Object maps.
 var (
-	chanMap = make(map[uint32]*net.ConnectionGroup, 0)
-	userMap = make(map[uint32]string, 0)
+	chanMap     = make(map[uint32]*net.BroadcastGroup, 0)
+	chanNameMap = make(map[string]*net.BroadcastGroup, 0)
+	userMap     = make(map[uint32]string, 0)
 )
 
 // main is the application entry point
 func main() {
 	log.DebugLogs = true
 
+	// args
+    if len(os.Args) > 1 {
+    	srvAddr = os.Args[1]
+    }
+
 	// startup
 	proto.AddSignature(msgProc)
 	proto.SetAccessProvider(new(net.NoSecurity))
 	srv.RegisterDiscoHandler(discoHandler)
 	srv.Start(srvAddr)
-
-	proto.RegisterConnection(pubChan)
-	chanMap[pubChan.Id()] = pubChan
 
 	// do stuff
 	for syncObj.QueryRun() {
@@ -75,9 +79,71 @@ func main() {
 	syncObj.ShutdownComplete()
 }
 
+// announceUser sends a message announcing a user's presence to all other users
+// in a channel.
+func announceUserJoin(ch *net.BroadcastGroup, user uint32) {
+	msg        := new(chat.Msg)
+	msg.Subtype = chat.MSG_SUB_CHAT
+	msg.ToId    = ch.Id()
+	msg.Text    = fmt.Sprintf(
+		"%s joined channel '%s'",
+		userMap[user],
+		ch.Name(),
+	)
+
+	msgProc.SendMsg(msg.ToId, msg)
+}
+
+// announceUserLeave sends a message announcing a user's departure to all other
+// users in a channel.
+func announceUserLeave(ch *net.BroadcastGroup, user uint32) {
+	msg        := new(chat.Msg)
+	msg.Subtype = chat.MSG_SUB_CHAT
+	msg.ToId    = ch.Id()
+	msg.Text    = fmt.Sprintf(
+		"%s left channel '%s'",
+		userMap[user],
+		ch.Name(),
+	)
+
+	msgProc.SendMsg(msg.ToId, msg)
+}
+
+// createChannel checks the registration maps for the named channel and either
+// returns a pointer to an existing channel, or creates, registers and returns
+// a pointer to a new channel object.
+func createChannel(name string) *net.BroadcastGroup {
+	ch := chanNameMap[name]
+	if ch == nil {
+		log.Debug("Creating channel %s", name)
+		ch = net.NewBroadcastGroup(name)
+		chanMap[ch.Id()]       = ch
+		chanNameMap[ch.Name()] = ch
+
+		proto.RegisterConnection(ch)
+	}
+
+	return ch
+}
+
+// distChatMsg distributes an incoming chat message to all clients in the given
+// channel.
+func distChatMsg(msg *chat.Msg) {
+	msgProc.SendMsg(msg.ChannelId, msg)
+}
+
 // handleDisco removes disconnected clients from channel lists.
 func handleDisco(id uint32) {
-	pubChan.RemoveConnection(id)
+	for k, _ := range chanMap {
+		ch  := chanMap[k]
+		con := ch.GetConnection(id)
+		if con != nil {
+			ch.RemoveConnection(id)
+			announceUserLeave(ch, id)
+		}
+	}
+
+	delete(userMap, id)
 }
 
 // handleMsg reads new chat messages and redistributes them to other clients
@@ -91,57 +157,68 @@ func handleMsg(msg *chat.Msg) {
 	case chat.MSG_SUB_CMD:
 		return
 	case chat.MSG_SUB_CONNECT:
-		sendConnectConfirm(msg)
+		handleConnect(msg)
 	case chat.MSG_SUB_JOIN_CHANNEL:
-		return
+		handleJoinChan(msg)
 	case chat.MSG_SUB_LEAVE_CHANNEL:
 		return
 	case chat.MSG_SUB_SET_NAME:
-		registerName(msg)
+		handleSetName(msg)
 	}
 }
 
+// handleConnect sends a message back to the conneting client to confirm
+// their access and set their initial channel.
+func handleConnect(msg *chat.Msg) {
+	toId         := msg.FromId
+	userMap[toId] = msg.From
 
-// distChatMsg distributes an incoming chat message to all clients in the given
-// channel.
-func distChatMsg(msg *chat.Msg) {
-	msgProc.SendMsg(msg.ChannelId, msg)
+	// reply
+	msg.ChannelId = 0
+	msg.ToId      = toId
+	msgProc.SendMsg(toId, msg)
+
+	// send welcome message
+	sendWelcomeMsg(toId, userMap[toId])
 }
 
-// registerName links a client network ID to a friendly username. If the client
+// handleJoinChan adds a user to a channel, if not already presents and they
+// have required rights, and then calls accounceUser().
+func handleJoinChan(msg *chat.Msg) {
+	ch     := createChannel(strings.TrimSpace(msg.Text))
+	userId := msg.FromId
+
+	con := ch.GetConnection(userId)
+	if con == nil {
+		ch.AddConnection(proto.GetConnection(userId))
+		announceUserJoin(ch, userId)
+	}
+
+	// reply
+	msg.ChannelId = ch.Id()
+	msg.From      = ch.Name()
+	msg.ToId      = userId
+	msgProc.SendMsg(msg.ToId, msg)
+}
+
+// handleSetName links a client network ID to a friendly username. If the client
 // is registering for the first time, a welcome message is sent back to that
 // client.
-func registerName(msg *chat.Msg) {
-	_, exist := userMap[msg.FromId]
-	if !exist  {
-		defer sendWelcomeMsg(msg.FromId, msg.From)
-	}
-
+func handleSetName(msg *chat.Msg) {
 	userMap[msg.FromId] = msg.From
-
 	sendSetNameConfirm(msg)
-}
-
-// sendConnectConfirm sends a message back to the conneting client to confirm
-// their access and set their initial channel.
-func sendConnectConfirm(msg *chat.Msg) {
-	pubChan.AddConnection(proto.GetConnection(msg.FromId))
-	sendJoinChanConfirm(pubChan, msg.Duplicate())
-
-	msg.ChannelId = pubChan.Id()
-	msg.ToId      = msg.FromId
-	msgProc.SendMsg(msg.ToId, msg)
 }
 
 // sendJoinChanConfirm sends a message to the client to let it know that it has
 // successfully joined a new channel.
-func sendJoinChanConfirm(ch *net.ConnectionGroup, msg *chat.Msg) {
+func sendJoinChanConfirm(ch *net.BroadcastGroup, toId uint32) {
+	msg          := new(chat.Msg)
 	msg.ChannelId = ch.Id()
 	msg.From      = ch.Name()
 	msg.Subtype   = chat.MSG_SUB_JOIN_CHANNEL
-	msg.ToId      = msg.FromId
+	msg.ToId      = toId
 
-	msgProc.SendMsg(msg.ToId, msg)
+	msgProc.SendMsg(toId, msg)
 }
 
 // sendSetNameConfirm sends a confirmation that the user's name was set
@@ -156,12 +233,11 @@ func sendSetNameConfirm(msg *chat.Msg) {
 
 // sendWelcomeMsg sends a quick hello to newly connected users.
 func sendWelcomeMsg(id uint32, name string) {
-	conMsg := chat.Msg {
-		From:    "SYSTEM",
-		Subtype: chat.MSG_SUB_CHAT,
-		ToId:	 id,
-		Text:    fmt.Sprintf("Welcome %v!", name),
-	}
+	conMsg          := new(chat.Msg)
+	conMsg.ChannelId = 0
+	conMsg.Subtype   = chat.MSG_SUB_CHAT
+	conMsg.ToId      = id
+	conMsg.Text      = fmt.Sprintf("Welcome %v!", name)
 
-	msgProc.SendMsg(conMsg.ToId, &conMsg)
+	msgProc.SendMsg(conMsg.ToId, conMsg)
 }
