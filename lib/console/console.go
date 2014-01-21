@@ -2,7 +2,7 @@
 //
 //  console.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -24,9 +24,9 @@ import (
 
 // ANSI set mode flags.
 const (
-	S_CLEAR		= iota
+	S_CLEAR = iota
 	S_BOLD
-	FG_BLACK 	= 28 + iota
+	FG_BLACK = 28 + iota
 	FG_RED
 	FG_GREEN
 	FG_YELLOW
@@ -34,7 +34,7 @@ const (
 	FG_MAGENTA
 	FG_CYAN
 	FG_WHITE
-	BG_BLACK 	= 30 + iota
+	BG_BLACK = 30 + iota
 	BG_RED
 	BG_GREEN
 	BG_YELLOW
@@ -51,21 +51,23 @@ const (
 
 // Key sequences.
 var (
-	CLEAR_FORMAT    = ESC_CHAR + "[0m"
-	CLEAR_LINE      = ESC_CHAR + "[2K"
-	CLEAR_SCREEN    = ESC_CHAR + "[2J"
-	CURSOR_DOWN_ONE = ESC_CHAR + "[1B"
-	CURSOR_UP_ONE   = ESC_CHAR + "[1A"
-	ESC_CHAR        = string(0x1B)
-	SCROLL_DOWN     = ESC_CHAR + "M"
-	SCROLL_UP       = ESC_CHAR + "D"
-	SET_BOLD        = ESC_CHAR + "[1m"
+	CLEAR_FORMAT     = ESC_CHAR + "[0m"
+	CLEAR_LINE       = ESC_CHAR + "[2K"
+	CLEAR_SCREEN     = ESC_CHAR + "[2J"
+	CURSOR_DOWN_ONE  = ESC_CHAR + "[1B"
+	CURSOR_UP_ONE    = ESC_CHAR + "[1A"
+	DISABLE_LINEWRAP = ESC_CHAR + "[?7l"
+	ENABLE_LINEWRAP  = ESC_CHAR + "[?7h"
+	ESC_CHAR         = string(0x1B)
+	SCROLL_DOWN      = ESC_CHAR + "M"
+	SCROLL_UP        = ESC_CHAR + "D"
+	SET_BOLD         = ESC_CHAR + "[1m"
 )
 
 // Synchronization helpers.
 var mutex sync.Mutex
 
-// Style represents a console output format used by 
+// Style represents a console output format used by
 // WriteFmt() and WriteLineFmt().
 type Style struct {
 	ForeColor int
@@ -85,7 +87,7 @@ func ClearFormat() {
 func ClearScreen() {
 	mutex.Lock()
 	defer mutex.Unlock()
-	
+
 	fmt.Fprint(os.Stdout, CLEAR_SCREEN)
 }
 
@@ -93,22 +95,22 @@ func ClearScreen() {
 // and returns a read-only channel on which the client can receive strings
 // that are read from Stdin.
 func ReadInput(exitSeq string) <-chan string {
-	input    := bufio.NewReader(os.Stdin)
+	input := bufio.NewReader(os.Stdin)
 	readChan := make(chan string, READ_BUFFER_LEN)
 
 	go func() {
-	    for {
-	    	txt, err := input.ReadString('\n')
-	    	if err != nil {
-	    		continue
-	    	}
+		for {
+			txt, err := input.ReadString('\n')
+			if err != nil {
+				continue
+			}
 
-	    	if txt == exitSeq {
-		    	readChan<- txt
-	    		return
-	    	}
+			if txt == exitSeq {
+				readChan <- txt
+				return
+			}
 
-	    	readChan<- txt
+			readChan <- txt
 		}
 	}()
 
@@ -124,7 +126,7 @@ func SetBackColor(flag int) {
 
 	mutex.Lock()
 	defer mutex.Unlock()
-	
+
 	fmt.Fprintf(
 		os.Stdout,
 		"%s[%vm",
@@ -137,7 +139,7 @@ func SetBackColor(flag int) {
 func SetBold() {
 	mutex.Lock()
 	defer mutex.Unlock()
-	
+
 	fmt.Fprint(os.Stdout, SET_BOLD)
 }
 
@@ -150,7 +152,7 @@ func SetForeColor(flag int) {
 
 	mutex.Lock()
 	defer mutex.Unlock()
-	
+
 	fmt.Fprintf(
 		os.Stdout,
 		"%s[%vm",
@@ -163,7 +165,7 @@ func SetForeColor(flag int) {
 func Write(text string) {
 	mutex.Lock()
 	defer mutex.Unlock()
-	
+
 	fmt.Fprint(os.Stdout, text)
 }
 
@@ -173,31 +175,30 @@ func Write(text string) {
 func WriteFmt(text string, style Style) {
 	SetForeColor(style.ForeColor)
 	SetBackColor(style.BackColor)
-	
+
 	if style.Bold {
 		SetBold()
 	}
-	
+
 	Write(text)
-	
+
 	ClearFormat()
 }
 
-// WriteLine writes the supplied text, terminated with a newline, to 
+// WriteLine writes the supplied text, terminated with a newline, to
 // the console.
 func WriteLine(text string) {
 	mutex.Lock()
 	defer mutex.Unlock()
-	
-	fmt.Fprint(os.Stdout, text + "\n")
+
+	fmt.Fprint(os.Stdout, text+"\n")
 }
 
 // WriteLineFmt sets sets foreground, background color and font weight,
-// specified by the given style, writes the given text, and then clears 
-// the formatting before writing out a newline. Doing so in this way 
+// specified by the given style, writes the given text, and then clears
+// the formatting before writing out a newline. Doing so in this way
 // avoids color artifacts in the console.
 func WriteLineFmt(text string, style Style) {
-	WriteFmt(text, style)	
+	WriteFmt(text, style)
 	Write("\n")
 }
-

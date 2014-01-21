@@ -87,7 +87,7 @@ func main() {
 
 	// set up the console screen
 	console.ClearScreen()
-	console.Write(console.ESC_CHAR + "[?7l")
+	console.Write(console.DISABLE_LINEWRAP)
 	console.WriteLine("====================================")
 	console.WriteLine("ChatCli v0.1")
 	console.WriteLine("Copyright 2014 Jared Chavez")
@@ -135,6 +135,8 @@ func main() {
 
 	// synchronize with background tasks shutting down
 	syncObj.ShutdownComplete()
+
+	console.Write(console.ENABLE_LINEWRAP)
 }
 
 // handleInput validates console input, sends any local commands to the

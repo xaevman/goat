@@ -94,8 +94,8 @@ func announceUserJoin(ch *net.BroadcastGroup, user uint32) {
 		ch.Name(),
 	)
 
-	log.Debug("%+v", msg)
-	msgProc.SendMsg(msg.ToId, msg)
+	log.Debug("TX: %+v", msg)
+	go msgProc.SendMsg(msg.ToId, msg)
 }
 
 // announceUserLeave sends a message announcing a user's departure to all other
@@ -110,8 +110,8 @@ func announceUserLeave(ch *net.BroadcastGroup, user uint32) {
 		ch.Name(),
 	)
 
-	log.Debug("%+v", msg)
-	msgProc.SendMsg(msg.ToId, msg)
+	log.Debug("TX: %+v", msg)
+	go msgProc.SendMsg(msg.ToId, msg)
 }
 
 // createChannel checks the registration maps for the named channel and either
@@ -134,8 +134,6 @@ func createChannel(name string) *net.BroadcastGroup {
 // distChatMsg distributes an incoming chat message to all clients in the given
 // channel.
 func distChatMsg(msg *chat.Msg) {
-	log.Debug("%+v", msg)
-
 	ch := chanMap[msg.ChannelId]
 	if ch == nil {
 		// channel doesn't exist
@@ -147,7 +145,8 @@ func distChatMsg(msg *chat.Msg) {
 		return
 	}
 
-	msgProc.SendMsg(msg.ChannelId, msg)
+	log.Debug("TX: %+v", msg)
+	go msgProc.SendMsg(msg.ChannelId, msg)
 }
 
 // handleDisco removes disconnected clients from channel lists.
@@ -164,10 +163,10 @@ func handleDisco(con net.Connection) {
 	delete(userMap, con.Id())
 }
 
-// handleMsg reads new chat messages and redistributes them to other clients
-// in the same channel.
+// handleMsg reads new messages and redistributes them to their appropriate
+// handlers based on subtype.
 func handleMsg(msg *chat.Msg) {
-	log.Debug("%+v", msg)
+	log.Debug("RX: %+v", msg)
 
 	switch msg.Subtype {
 	case chat.MSG_SUB_CHAT:
@@ -196,8 +195,8 @@ func handleConnect(msg *chat.Msg) {
 	msg.From = ""
 	msg.ToId = toId
 
-	log.Debug("%+v", msg)
-	msgProc.SendMsg(toId, msg)
+	log.Debug("TX: %+v", msg)
+	go msgProc.SendMsg(toId, msg)
 
 	// send welcome message
 	sendWelcomeMsg(toId, userMap[toId])
@@ -220,8 +219,8 @@ func handleJoinChan(msg *chat.Msg) {
 	msg.From = ch.Name()
 	msg.ToId = userId
 
-	log.Debug("%+v", msg)
-	msgProc.SendMsg(msg.ToId, msg)
+	log.Debug("TX: %+v", msg)
+	go msgProc.SendMsg(msg.ToId, msg)
 }
 
 // handleSetName links a client network ID to a friendly username. If the client
@@ -241,8 +240,8 @@ func sendJoinChanConfirm(ch *net.BroadcastGroup, toId uint32) {
 	msg.Subtype = chat.MSG_SUB_JOIN_CHANNEL
 	msg.ToId = toId
 
-	log.Debug("%+v", msg)
-	msgProc.SendMsg(toId, msg)
+	log.Debug("TX: %+v", msg)
+	go msgProc.SendMsg(toId, msg)
 }
 
 // sendSetNameConfirm sends a confirmation that the user's name was set
@@ -252,8 +251,8 @@ func sendSetNameConfirm(msg *chat.Msg) {
 	msg.From = ""
 	msg.ToId = msg.FromId
 
-	log.Debug("%+v", msg)
-	msgProc.SendMsg(msg.ToId, msg)
+	log.Debug("TX: %+v", msg)
+	go msgProc.SendMsg(msg.ToId, msg)
 }
 
 // sendWelcomeMsg sends a quick hello to newly connected users.
@@ -264,6 +263,6 @@ func sendWelcomeMsg(id uint32, name string) {
 	conMsg.ToId = id
 	conMsg.Text = fmt.Sprintf("Welcome %v!", name)
 
-	log.Debug("%+v", conMsg)
-	msgProc.SendMsg(conMsg.ToId, conMsg)
+	log.Debug("TX: %+v", conMsg)
+	go msgProc.SendMsg(conMsg.ToId, conMsg)
 }
