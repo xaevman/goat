@@ -2,7 +2,7 @@
 //
 //  main.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -29,11 +29,11 @@ import (
 
 // Network objects.
 var (
-	discoHandler = net.NewDisconnectChan()
-	msgProc 	 = new(chat.MsgHandler)
-	proto		 = net.NewProtocol("Chat")
-	srv			 = net.NewTCPSrv()
-	srvAddr		 = "127.0.0.1:8900"
+	evtHandler = net.NewEventChan()
+	msgProc    = new(chat.MsgHandler)
+	proto      = net.NewProtocol("Chat")
+	srv        = net.NewTCPSrv()
+	srvAddr    = "127.0.0.1:8900"
 )
 
 // Synchronization helpers.
@@ -51,14 +51,13 @@ func main() {
 	log.DebugLogs = true
 
 	// args
-    if len(os.Args) > 1 {
-    	srvAddr = os.Args[1]
-    }
+	if len(os.Args) > 1 {
+		srvAddr = os.Args[1]
+	}
 
 	// startup
 	proto.AddSignature(msgProc)
 	proto.SetAccessProvider(new(net.NoSecurity))
-	srv.RegisterDiscoHandler(discoHandler)
 	srv.Start(srvAddr)
 
 	// do stuff
@@ -66,8 +65,12 @@ func main() {
 		select {
 		case msg := <-msgProc.QueryReceiveMsg():
 			handleMsg(msg)
-		case id := <-discoHandler.QueryDisconnect():
-			handleDisco(id)
+		case <-evtHandler.QueryConnect():
+			continue
+		case con := <-evtHandler.QueryDisconnect():
+			handleDisco(con)
+		case timeout := <-evtHandler.QueryTimeout():
+			log.Error("%+v", timeout)
 		case <-syncObj.QueryShutdown():
 		}
 	}
@@ -82,30 +85,32 @@ func main() {
 // announceUser sends a message announcing a user's presence to all other users
 // in a channel.
 func announceUserJoin(ch *net.BroadcastGroup, user uint32) {
-	msg        := new(chat.Msg)
+	msg := new(chat.Msg)
 	msg.Subtype = chat.MSG_SUB_CHAT
-	msg.ToId    = ch.Id()
-	msg.Text    = fmt.Sprintf(
+	msg.ToId = ch.Id()
+	msg.Text = fmt.Sprintf(
 		"%s joined channel '%s'",
 		userMap[user],
 		ch.Name(),
 	)
 
+	log.Debug("%+v", msg)
 	msgProc.SendMsg(msg.ToId, msg)
 }
 
 // announceUserLeave sends a message announcing a user's departure to all other
 // users in a channel.
 func announceUserLeave(ch *net.BroadcastGroup, user uint32) {
-	msg        := new(chat.Msg)
+	msg := new(chat.Msg)
 	msg.Subtype = chat.MSG_SUB_CHAT
-	msg.ToId    = ch.Id()
-	msg.Text    = fmt.Sprintf(
+	msg.ToId = ch.Id()
+	msg.Text = fmt.Sprintf(
 		"%s left channel '%s'",
 		userMap[user],
 		ch.Name(),
 	)
 
+	log.Debug("%+v", msg)
 	msgProc.SendMsg(msg.ToId, msg)
 }
 
@@ -117,7 +122,7 @@ func createChannel(name string) *net.BroadcastGroup {
 	if ch == nil {
 		log.Debug("Creating channel %s", name)
 		ch = net.NewBroadcastGroup(name)
-		chanMap[ch.Id()]       = ch
+		chanMap[ch.Id()] = ch
 		chanNameMap[ch.Name()] = ch
 
 		proto.RegisterConnection(ch)
@@ -129,21 +134,34 @@ func createChannel(name string) *net.BroadcastGroup {
 // distChatMsg distributes an incoming chat message to all clients in the given
 // channel.
 func distChatMsg(msg *chat.Msg) {
+	log.Debug("%+v", msg)
+
+	ch := chanMap[msg.ChannelId]
+	if ch == nil {
+		// channel doesn't exist
+		return
+	}
+
+	if ch.GetConnection(msg.FromId) == nil {
+		// user not a member of that channel
+		return
+	}
+
 	msgProc.SendMsg(msg.ChannelId, msg)
 }
 
 // handleDisco removes disconnected clients from channel lists.
-func handleDisco(id uint32) {
+func handleDisco(con net.Connection) {
 	for k, _ := range chanMap {
-		ch  := chanMap[k]
-		con := ch.GetConnection(id)
-		if con != nil {
-			ch.RemoveConnection(id)
-			announceUserLeave(ch, id)
+		ch := chanMap[k]
+		chCon := ch.GetConnection(con.Id())
+		if chCon == con {
+			ch.RemoveConnection(con.Id())
+			announceUserLeave(ch, con.Id())
 		}
 	}
 
-	delete(userMap, id)
+	delete(userMap, con.Id())
 }
 
 // handleMsg reads new chat messages and redistributes them to other clients
@@ -170,12 +188,15 @@ func handleMsg(msg *chat.Msg) {
 // handleConnect sends a message back to the conneting client to confirm
 // their access and set their initial channel.
 func handleConnect(msg *chat.Msg) {
-	toId         := msg.FromId
+	toId := msg.FromId
 	userMap[toId] = msg.From
 
 	// reply
 	msg.ChannelId = 0
-	msg.ToId      = toId
+	msg.From = ""
+	msg.ToId = toId
+
+	log.Debug("%+v", msg)
 	msgProc.SendMsg(toId, msg)
 
 	// send welcome message
@@ -185,7 +206,7 @@ func handleConnect(msg *chat.Msg) {
 // handleJoinChan adds a user to a channel, if not already presents and they
 // have required rights, and then calls accounceUser().
 func handleJoinChan(msg *chat.Msg) {
-	ch     := createChannel(strings.TrimSpace(msg.Text))
+	ch := createChannel(strings.TrimSpace(msg.Text))
 	userId := msg.FromId
 
 	con := ch.GetConnection(userId)
@@ -196,8 +217,10 @@ func handleJoinChan(msg *chat.Msg) {
 
 	// reply
 	msg.ChannelId = ch.Id()
-	msg.From      = ch.Name()
-	msg.ToId      = userId
+	msg.From = ch.Name()
+	msg.ToId = userId
+
+	log.Debug("%+v", msg)
 	msgProc.SendMsg(msg.ToId, msg)
 }
 
@@ -212,12 +235,13 @@ func handleSetName(msg *chat.Msg) {
 // sendJoinChanConfirm sends a message to the client to let it know that it has
 // successfully joined a new channel.
 func sendJoinChanConfirm(ch *net.BroadcastGroup, toId uint32) {
-	msg          := new(chat.Msg)
+	msg := new(chat.Msg)
 	msg.ChannelId = ch.Id()
-	msg.From      = ch.Name()
-	msg.Subtype   = chat.MSG_SUB_JOIN_CHANNEL
-	msg.ToId      = toId
+	msg.From = ch.Name()
+	msg.Subtype = chat.MSG_SUB_JOIN_CHANNEL
+	msg.ToId = toId
 
+	log.Debug("%+v", msg)
 	msgProc.SendMsg(toId, msg)
 }
 
@@ -226,18 +250,20 @@ func sendJoinChanConfirm(ch *net.BroadcastGroup, toId uint32) {
 func sendSetNameConfirm(msg *chat.Msg) {
 	msg.Text = fmt.Sprintf("Name set to %v", msg.From)
 	msg.From = ""
-
 	msg.ToId = msg.FromId
+
+	log.Debug("%+v", msg)
 	msgProc.SendMsg(msg.ToId, msg)
 }
 
 // sendWelcomeMsg sends a quick hello to newly connected users.
 func sendWelcomeMsg(id uint32, name string) {
-	conMsg          := new(chat.Msg)
+	conMsg := new(chat.Msg)
 	conMsg.ChannelId = 0
-	conMsg.Subtype   = chat.MSG_SUB_CHAT
-	conMsg.ToId      = id
-	conMsg.Text      = fmt.Sprintf("Welcome %v!", name)
+	conMsg.Subtype = chat.MSG_SUB_CHAT
+	conMsg.ToId = id
+	conMsg.Text = fmt.Sprintf("Welcome %v!", name)
 
+	log.Debug("%+v", conMsg)
 	msgProc.SendMsg(conMsg.ToId, conMsg)
 }

@@ -2,7 +2,7 @@
 //
 //  goapp.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -25,15 +25,15 @@ import (
 )
 
 // Application properties.
-var	(
-	appName       string
+var (
+	appName     string
 	initialized = false
 )
 
 // Synchronization helpers.
 var (
 	msgPump = make(chan bool, 1)
-	mutex     sync.Mutex
+	mutex   sync.Mutex
 	syncObj = lifecycle.New()
 )
 
@@ -47,7 +47,7 @@ var (
 
 // AppStarter defines the interface which should be implemented
 // and registered via SetAppStarter() to execute user code before
-// and just after application initialization. 
+// and just after application initialization.
 type AppStarter interface {
 	PreInit()
 	PostInit()
@@ -71,7 +71,7 @@ type CrashHandler interface {
 // LoopHandler defines the interface which should be implemented
 // and registered via SetLoopHandler() to execute user code before
 // and after the primary application channel loop. The primary loop runs
-// after application initialization and is triggered by the application 
+// after application initialization and is triggered by the application
 // heartbeat (if configured), or via manual calls to MsgPump().
 type LoopHandler interface {
 	OnHeartbeat()
@@ -87,7 +87,7 @@ func Initialized() bool {
 
 // MsgPump manually pulses the main application loop.
 func MsgPump() {
-	msgPump<- true
+	msgPump <- true
 }
 
 // Name returns the name of the GoApp application.
@@ -154,7 +154,7 @@ func Stop() {
 func handlePanic() {
 	err := recover()
 	if err == nil {
-		return 
+		return
 	}
 
 	crashHandler.OnCrash(err)
@@ -217,4 +217,3 @@ func internalStop() {
 
 	syncObj.ShutdownComplete()
 }
-

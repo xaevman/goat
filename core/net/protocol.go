@@ -2,7 +2,7 @@
 //
 //  protocol.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -39,14 +39,13 @@ const (
 )
 
 // Perf counter friendly names.
-var perfNames = []string {
+var perfNames = []string{
 	"SendCount",
 	"SendTotal",
 	"ReceiveCount",
 	"ReceiveTotal",
 	"MsgTotal",
 }
-
 
 // Protocol represents a collection of related clients, message type
 // signatures, and the message processing, access, crypto, and compression
@@ -68,7 +67,7 @@ type Protocol struct {
 // Protocol object, registers it with the net service, and returns a pointer to it
 // for use.
 func NewProtocol(pName string) *Protocol {
-	newProto := Protocol {
+	newProto := Protocol{
 		cliMap: make(map[uint32]Connection, 0),
 		name:   pName,
 		sigMap: make(map[uint16]MsgProcessor, 0),
@@ -116,8 +115,8 @@ func (this *Protocol) DeleteSignature(proc MsgProcessor) {
 
 	if this.sigMap[proc.Signature()] != proc {
 		log.Error(
-			"MsgProcessor registered, but doesn't match the call " +
-			"to unregister (sig: %v). Aborting...",
+			"MsgProcessor registered, but doesn't match the call "+
+				"to unregister (sig: %v). Aborting...",
 			proc.Signature(),
 		)
 		return
@@ -196,7 +195,7 @@ func (this *Protocol) SetCompressionProvider(provider CompressionProvider) {
 	if provider == nil {
 		return
 	}
-	
+
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -214,7 +213,7 @@ func (this *Protocol) SetCryptoProvider(provider CryptoProvider) {
 	if provider == nil {
 		return
 	}
-	
+
 	this.objMutex.Lock()
 	defer this.objMutex.Unlock()
 
@@ -241,7 +240,7 @@ func (this *Protocol) getAccess(con Connection) byte {
 
 	if this.security == nil {
 		log.Debug(
-			"No access provider registered. Dropping client %v", 
+			"No access provider registered. Dropping client %v",
 			con.Id(),
 		)
 		go con.Close()
@@ -290,7 +289,7 @@ func (this *Protocol) onDisconnect(con Connection) {
 // rcvMsg is the message pipeline for incoming messages. First, the protocol
 // is checked to see if a message processor is registered. Next, the registered
 // AccessProvider is queried to make sure the message is allowed to pass. Then,
-// the message is passed through registered Decryption and Decompression 
+// the message is passed through registered Decryption and Decompression
 // processes if registered and necessary. Finally, the pre-processed message is
 // passed to the message processor for final processing.
 func (this *Protocol) rcvMsg(msg *Msg) {
@@ -318,8 +317,8 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	if GetMsgEncryptedFlag(msg.Header) {
 		if this.crypto == nil {
 			log.Debug(
-				"Encryption flag set, but no encrpytion provider." +
-				"Dropping message (proto: %s)",
+				"Encryption flag set, but no encrpytion provider."+
+					"Dropping message (proto: %s)",
 				this.name,
 			)
 			return
@@ -339,8 +338,8 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	if GetMsgCompressedFlag(msg.Header) {
 		if this.compressor == nil {
 			log.Debug(
-				"Compression flag set, but no compression provider." +
-				"Dropping message (proto: %s)",
+				"Compression flag set, but no compression provider."+
+					"Dropping message (proto: %s)",
 				this.name,
 			)
 			return
@@ -360,7 +359,7 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	err := proc.ReceiveMsg(msg, access)
 	if err != nil {
 		log.Debug(
-			"Error processing message (proto: %s, err: %v)", 
+			"Error processing message (proto: %s, err: %v)",
 			this.name,
 			err,
 		)
@@ -392,8 +391,8 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 	sig := GetMsgSig(msg.Header)
 	if this.sigMap[sig] == nil {
 		return errors.New(fmt.Sprintf(
-			"Can't send a message for an unregistered message type " +
-			"signature (%v)",
+			"Can't send a message for an unregistered message type "+
+				"signature (%v)",
 			sig,
 		))
 	}
@@ -402,7 +401,7 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 		if this.compressor == nil {
 			return errors.New(
 				"Compression bit set, but no CompressionProvider " +
-				"registered.",
+					"registered.",
 			)
 		}
 
@@ -429,8 +428,8 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 		}
 	}
 
-	cli.Send(msg.GetBytes())
-	
+	cli.Send(msg.GetBytes(), msg.TimeoutSec)
+
 	this.perfs.Increment(PERF_SEND_COUNT)
 
 	return nil

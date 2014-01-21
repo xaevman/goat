@@ -2,7 +2,7 @@
 //
 //  main.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -30,8 +30,7 @@ import (
 
 // Console text constants.
 const (
-	EXIT_MSG   = "exit\n"
-	PROMPT_TXT = "prompt> "
+	EXIT_MSG = "exit\n"
 )
 
 // Network objects.
@@ -50,30 +49,29 @@ var (
 
 // Text styles.
 var (
-	errStyle = console.Style {
+	errStyle = console.Style{
 		ForeColor: console.FG_RED,
 		Bold:      true,
 	}
 
-	sysStyle = console.Style {
+	sysStyle = console.Style{
 		ForeColor: console.FG_YELLOW,
 		Bold:      true,
 	}
 
-	txtStyle = console.Style {
+	txtStyle = console.Style{
 		ForeColor: console.FG_WHITE,
 	}
 
-	privStyle = console.Style {
+	privStyle = console.Style{
 		ForeColor: console.FG_MAGENTA,
 	}
 )
 
-var discoChan          = net.NewDisconnectChan()
-var	myName             = "Anon"
 var currentChan uint32 = 0
-var syncObj            = lifecycle.New()
-
+var evtHandler = net.NewEventChan()
+var myName = "Anon"
+var syncObj = lifecycle.New()
 
 // main is the application entry point.
 func main() {
@@ -83,12 +81,13 @@ func main() {
 	if len(os.Args) > 1 {
 		srvAddr = os.Args[1]
 	}
-    if len(os.Args) > 2 {
-    	myName = os.Args[2]
-    }
+	if len(os.Args) > 2 {
+		myName = os.Args[2]
+	}
 
-    // set up the console screen
+	// set up the console screen
 	console.ClearScreen()
+	console.Write(console.ESC_CHAR + "[?7l")
 	console.WriteLine("====================================")
 	console.WriteLine("ChatCli v0.1")
 	console.WriteLine("Copyright 2014 Jared Chavez")
@@ -98,11 +97,10 @@ func main() {
 	// start network services
 	proto.AddSignature(msgProc)
 	proto.SetAccessProvider(new(net.NoSecurity))
-	srv.RegisterDiscoHandler(discoChan)
 	err := srv.Dial(srvAddr)
 	if err != nil {
 		console.WriteLineFmt(
-			"Couldn't connect. Exiting...", 
+			"Couldn't connect. Exiting...",
 			errStyle,
 		)
 		return
@@ -121,8 +119,12 @@ func main() {
 			handleInput(in)
 		case msg := <-msgProc.QueryReceiveMsg():
 			handleMsg(msg)
-		case <-discoChan.QueryDisconnect():
+		case <-evtHandler.QueryConnect():
+			continue
+		case <-evtHandler.QueryDisconnect():
 			onDisconnect()
+		case timeout := <-evtHandler.QueryTimeout():
+			log.Error("%+v", timeout)
 		case <-syncObj.QueryShutdown():
 		}
 	}
@@ -204,7 +206,7 @@ func onDisconnect() {
 
 	console.WriteLine("")
 	printChatText(
-		"Disconnected from server", 
+		"Disconnected from server",
 		errStyle,
 	)
 }
@@ -213,7 +215,7 @@ func onDisconnect() {
 // from the server.
 func onJoinChannel(msg *chat.Msg) {
 	chanIdMap[msg.ChannelId] = msg.From
-	chanNameMap[msg.From]    = msg.ChannelId
+	chanNameMap[msg.From] = msg.ChannelId
 
 	if msg.From == chat.PUB_CHANNEL {
 		currentChan = msg.ChannelId
@@ -222,7 +224,7 @@ func onJoinChannel(msg *chat.Msg) {
 	printPrompt(1)
 }
 
-// onLeaveChannel is called when a MSG_SUB_LEAVE_CHANNEL message is 
+// onLeaveChannel is called when a MSG_SUB_LEAVE_CHANNEL message is
 // received from the server.
 func onLeaveChannel(msg *chat.Msg) {
 	delete(chanIdMap, msg.ChannelId)
@@ -240,9 +242,9 @@ func printChatMsg(msg *chat.Msg) {
 	case msg.ChannelId != currentChan:
 		printChatText(
 			fmt.Sprintf(
-				"<%s.%s> %s", 
+				"<%s.%s> %s",
 				chanIdMap[msg.ChannelId],
-				msg.From, 
+				msg.From,
 				msg.Text,
 			),
 			privStyle,
@@ -250,9 +252,9 @@ func printChatMsg(msg *chat.Msg) {
 	default:
 		printChatText(
 			fmt.Sprintf(
-				"<%s.%s> %s", 
-				chanIdMap[msg.ChannelId], 
-				msg.From, 
+				"<%s.%s> %s",
+				chanIdMap[msg.ChannelId],
+				msg.From,
 				msg.Text,
 			),
 			txtStyle,
@@ -262,7 +264,7 @@ func printChatMsg(msg *chat.Msg) {
 	printPrompt(1)
 }
 
-// printPrompt inserts the given number of empty lines and then outputs the 
+// printPrompt inserts the given number of empty lines and then outputs the
 // prompt.
 func printPrompt(spacing int) {
 	for i := 0; i < spacing; i++ {
@@ -297,42 +299,42 @@ func printTextFromInput(txt string, style console.Style) {
 
 // sendChat sends a chat message to the server.
 func sendChat(channel uint32, text string) {
-	conMsg          := new(chat.Msg)
+	conMsg := new(chat.Msg)
 	conMsg.ChannelId = channel
-	conMsg.From      = myName
-	conMsg.Subtype   = chat.MSG_SUB_CHAT
-	conMsg.ToId      = srv.Socket().Id()
-	conMsg.Text      = text
+	conMsg.From = myName
+	conMsg.Subtype = chat.MSG_SUB_CHAT
+	conMsg.ToId = srv.Socket().Id()
+	conMsg.Text = text
 
-	msgProc.SendMsg(conMsg.ToId, conMsg)
+	go msgProc.SendMsg(conMsg.ToId, conMsg)
 }
 
 // sendConnect sends the initial connection message to the server.
 func sendConnect() {
-	conMsg        := new(chat.Msg)
-	conMsg.From    = myName
+	conMsg := new(chat.Msg)
+	conMsg.From = myName
 	conMsg.Subtype = chat.MSG_SUB_CONNECT
-	conMsg.ToId    = srv.Socket().Id()
+	conMsg.ToId = srv.Socket().Id()
 
-	msgProc.SendMsg(conMsg.ToId, conMsg)
+	go msgProc.SendMsg(conMsg.ToId, conMsg)
 }
 
 // sendJoinChannel sends a join channel request to the server.
 func sendJoinChannel(name string) {
-	joinMsg        := new(chat.Msg)
+	joinMsg := new(chat.Msg)
 	joinMsg.Subtype = chat.MSG_SUB_JOIN_CHANNEL
-	joinMsg.Text    = name
-	joinMsg.ToId    = srv.Socket().Id()
+	joinMsg.Text = name
+	joinMsg.ToId = srv.Socket().Id()
 
-	msgProc.SendMsg(joinMsg.ToId, joinMsg)
+	go msgProc.SendMsg(joinMsg.ToId, joinMsg)
 }
 
 // sendSetName sets this client's display name on the server.
 func sendSetName() {
-	conMsg        := new(chat.Msg)
-	conMsg.From    = myName
+	conMsg := new(chat.Msg)
+	conMsg.From = myName
 	conMsg.Subtype = chat.MSG_SUB_SET_NAME
-	conMsg.ToId    = srv.Socket().Id()
+	conMsg.ToId = srv.Socket().Id()
 
-	msgProc.SendMsg(conMsg.ToId, conMsg)
+	go msgProc.SendMsg(conMsg.ToId, conMsg)
 }

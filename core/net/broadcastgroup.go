@@ -2,7 +2,7 @@
 //
 //  broadcastgroup.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -20,22 +20,22 @@ import (
 )
 
 // BroadcastGroup represents a group of Connections that can be addressed
-// by via a single NetID. BroadcastGroup itself implements the Connection 
-// interface so that it can be used interchangebly with single Connection 
+// by via a single NetID. BroadcastGroup itself implements the Connection
+// interface so that it can be used interchangebly with single Connection
 // objects.
 type BroadcastGroup struct {
-	conList     map[uint32]Connection
-	id          uint32
-	key         string
-	lastIndex   int
-	mutex       sync.RWMutex
-	name        string
+	conList   map[uint32]Connection
+	id        uint32
+	key       string
+	lastIndex int
+	mutex     sync.RWMutex
+	name      string
 }
 
-// NewBroadcastGroup is a constructor helper which builds a newly initalized 
+// NewBroadcastGroup is a constructor helper which builds a newly initalized
 // instance of BroadcastGroup and returns a pointer to it for use.
 func NewBroadcastGroup(name string) *BroadcastGroup {
-	conGroup := BroadcastGroup {
+	conGroup := BroadcastGroup{
 		conList: make(map[uint32]Connection, 0),
 		id:      atomic.AddUint32(&netId, 1),
 		name:    name,
@@ -119,15 +119,15 @@ func (this *BroadcastGroup) RemoveConnection(id uint32) {
 
 // Send transmits a slice of bytes to member Connections in the
 // BroadcastGroup.
-func (this *BroadcastGroup) Send(data []byte) {
+func (this *BroadcastGroup) Send(data []byte, timeoutSec int) {
 	if data == nil {
 		return
 	}
-	
+
 	this.mutex.RLock()
 	defer this.mutex.RUnlock()
 
 	for k, _ := range this.conList {
-		this.conList[k].Send(data)
+		this.conList[k].Send(data, timeoutSec)
 	}
 }

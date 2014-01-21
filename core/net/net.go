@@ -2,7 +2,7 @@
 //
 //  net.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -13,9 +13,9 @@
 // Package net provides abstractions for TCP servers and clients
 // which handle massively parallel IO and present a unified interface
 // for implementing security and messaging protocols on top of them.
-//  
+//
 // Network message (max length 32KB)
-//		flags 
+//		flags
 //			11: compressed
 //			12: encrypted
 //			13: reserved
@@ -29,7 +29,7 @@
 package net
 
 // External imports.
-import(
+import (
 	"github.com/xaevman/goat/core/log"
 )
 
@@ -37,6 +37,11 @@ import(
 import (
 	"net"
 	"sync"
+)
+
+// Timeouts.
+const (
+	DEFAULT_TIMEOUT_SEC = 30
 )
 
 // Message header constants.
@@ -65,8 +70,14 @@ var netId uint32 = 50
 // Routing map and synchronization.
 var (
 	protoMap   = make(map[string]*Protocol)
-	routeMutex sync.RWMutex	
+	routeMutex sync.RWMutex
 	sigMap     = make(map[uint16]*Protocol)
+)
+
+// Event handler and synchronization.
+var (
+	eventHandler EventHandler
+	eventMutex   sync.RWMutex
 )
 
 // AccessProvider specifies the interface which network protocols will use
@@ -87,7 +98,7 @@ type CompressionProvider interface {
 	Close()
 	Compress(msg *Msg) error
 	Decompress(msg *Msg) error
-	Init(proto *Protocol) 
+	Init(proto *Protocol)
 }
 
 // Connection specifies the common interface that is used by AccessProvider
@@ -99,7 +110,7 @@ type Connection interface {
 	Key() string
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
-	Send(data []byte)
+	Send(data []byte, timeoutSec int)
 }
 
 // CryptoProvider specifies the interface which network protocols will use
@@ -113,10 +124,12 @@ type CryptoProvider interface {
 	Init(proto *Protocol)
 }
 
-// DisconnectHandler specifies the interface which TCP clients and servers
-// will use to notify subscribers of disconnection events.
-type DisconnectHandler interface {
-	Notify(id uint32)
+// EventHandler specifies the interface which TCP clients and servers
+// will use to notify subscribers of connect and disconnect events.
+type EventHandler interface {
+	OnDisconnect(con Connection)
+	OnConnect(con Connection)
+	OnTimeout(timeout *TimeoutEvent)
 }
 
 // MsgProcessor specifies the entry and exit points of the network system which
@@ -130,6 +143,13 @@ type MsgProcessor interface {
 	Signature() uint16
 }
 
+// EventHandler returns the net service's registered EventHandler.
+func GetEventHandler() EventHandler {
+	eventMutex.RLock()
+	defer eventMutex.RUnlock()
+
+	return eventHandler
+}
 
 // GetMsgCompressedFlag retrieves bit 11 of the message header, which is used
 // to specify whether the message data itself is compressed or not.
@@ -143,29 +163,29 @@ func GetMsgEncryptedFlag(header uint16) bool {
 	return (header & (1 << msgEncryptedOffset)) != 0
 }
 
-// GetMsgHeader retrieves the first 2 byte header of raw line data. 
-// Packed into the header is the message type signature and flags specifying 
+// GetMsgHeader retrieves the first 2 byte header of raw line data.
+// Packed into the header is the message type signature and flags specifying
 // whether the data payload is compressed and/or encrypted.
 func GetMsgHeader(msgData []byte) uint16 {
 	if len(msgData) < 2 {
 		panic("msgData buffer less than 2 bytes")
 	}
 
-	header := uint16(msgData[0]) << 8 | uint16(msgData[1])
-	
+	header := uint16(msgData[0])<<8 | uint16(msgData[1])
+
 	return header
 }
 
 // GetMsgPayload returns the payload portion of a raw message buffer.
 func GetMsgPayload(msgData []byte) []byte {
-  	if len(msgData) < 4 {
-     	panic("msgData buffer less than 2 bytes")
-   	}
+	if len(msgData) < 4 {
+		panic("msgData buffer less than 2 bytes")
+	}
 
-   	size := GetMsgSize(msgData)
- 
-   	return msgData[4:size + 4]
- }
+	size := GetMsgSize(msgData)
+
+	return msgData[4 : size+4]
+}
 
 // GetMsgSig retrieves the message type signature out of a raw message header.
 func GetMsgSig(header uint16) uint16 {
@@ -180,9 +200,19 @@ func GetMsgSize(msgData []byte) uint16 {
 		panic("msgData buffer less than 4 bytes")
 	}
 
-	size := uint16(msgData[2]) << 8 | uint16(msgData[3])
+	size := uint16(msgData[2])<<8 | uint16(msgData[3])
 
 	return size
+}
+
+// SetEventHandler sets the EventHandler object responsible for passing
+// connect and disconnect events up from the client and server connection
+// layers.
+func SetEventHandler(handler EventHandler) {
+	eventMutex.Lock()
+	defer eventMutex.Unlock()
+
+	eventHandler = handler
 }
 
 // SetMsgCompressedFlag sets bit 11 of a raw header object, which is used to
@@ -233,29 +263,62 @@ func SetMsgSize(size int, msgData []byte) {
 	msgData[3] = byte(size)
 }
 
+// Timeout calls the existing EventHandler implementation's OnTimeout function
+// to notify higher level clients about network timeout events.
+func Timeout(
+	timeoutType int,
+	messageType uint16,
+	parentId uint32,
+	data interface{},
+) {
+	eventMutex.RLock()
+	defer eventMutex.RUnlock()
+
+	if eventHandler == nil {
+		return
+	}
+
+	timeout := TimeoutEvent{
+		Data:        data,
+		MessageType: messageType,
+		ParentId:    parentId,
+		TimeoutType: timeoutType,
+	}
+
+	eventHandler.OnTimeout(&timeout)
+}
+
 // ValidateMsgHeader does some simple validation of the header in a raw
 // data buffer.
 func ValidateMsgHeader(msgData []byte) bool {
 	return len(msgData) > 3
 }
 
-// onConnect is called by appropriate, connection-based client and server 
+// onConnect is called by appropriate, connection-based client and server
 // objects to notify Protocols of clients coming into, and exiting, the system.
 func onConnect(con Connection) {
 	addr, _, _ := net.SplitHostPort(con.RemoteAddr().String())
 
 	log.Debug(
-		"%v[%v]->%v connected", 
+		"%v[%v]->%v connected",
 		addr,
 		con.Id(),
 		con.LocalAddr(),
 	)
 
 	routeMutex.RLock()
-	defer routeMutex.RUnlock()
 
 	for _, proto := range protoMap {
 		proto.onConnect(con)
+	}
+
+	routeMutex.RUnlock()
+
+	eventMutex.RLock()
+	defer eventMutex.RUnlock()
+
+	if eventHandler != nil {
+		eventHandler.OnConnect(con)
 	}
 }
 
@@ -272,10 +335,18 @@ func onDisconnect(con Connection) {
 	)
 
 	routeMutex.RLock()
-	defer routeMutex.RUnlock()
 
 	for _, proto := range protoMap {
 		proto.onDisconnect(con)
+	}
+
+	routeMutex.RUnlock()
+
+	eventMutex.RLock()
+	defer eventMutex.RUnlock()
+
+	if eventHandler != nil {
+		eventHandler.OnDisconnect(con)
 	}
 }
 
@@ -303,7 +374,7 @@ func registerProtocol(proto *Protocol) {
 
 	if protoMap[proto.name] != nil {
 		log.Error(
-			"Protocol %v already registered. Aborting registration", 
+			"Protocol %v already registered. Aborting registration",
 			proto.name,
 		)
 		return
@@ -322,8 +393,8 @@ func registerSignature(sig uint16, proto *Protocol) {
 
 	if protoMap[proto.name] == nil {
 		log.Error(
-			"Cannot register a Signature for an " +
-			"unregistered Protocol (sig: %v, proto: %v)",
+			"Cannot register a Signature for an "+
+				"unregistered Protocol (sig: %v, proto: %v)",
 			sig,
 			proto.name,
 		)
@@ -333,9 +404,9 @@ func registerSignature(sig uint16, proto *Protocol) {
 
 	if protoMap[proto.name] != proto {
 		log.Error(
-			"Error registering Signature: Specified protocol name " +
-			"is already registered, but with a different object " + 
-			"(sig: %v, proto: %v)",
+			"Error registering Signature: Specified protocol name "+
+				"is already registered, but with a different object "+
+				"(sig: %v, proto: %v)",
 			sig,
 			proto.name,
 		)
