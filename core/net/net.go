@@ -41,7 +41,9 @@ import (
 
 // Timeouts.
 const (
-	DEFAULT_TIMEOUT_SEC = 30
+	DEFAULT_TIMEOUT_SEC  = 30
+	MAX_SEND_TIMEOUT_SEC = 300
+	MIN_SEND_TIMEOUT_SEC = 5
 )
 
 // Message header constants.
@@ -263,31 +265,6 @@ func SetMsgSize(size int, msgData []byte) {
 	msgData[3] = byte(size)
 }
 
-// Timeout calls the existing EventHandler implementation's OnTimeout function
-// to notify higher level clients about network timeout events.
-func Timeout(
-	timeoutType int,
-	messageType uint16,
-	parentId uint32,
-	data interface{},
-) {
-	eventMutex.RLock()
-	defer eventMutex.RUnlock()
-
-	if eventHandler == nil {
-		return
-	}
-
-	timeout := TimeoutEvent{
-		Data:        data,
-		MessageType: messageType,
-		ParentId:    parentId,
-		TimeoutType: timeoutType,
-	}
-
-	eventHandler.OnTimeout(&timeout)
-}
-
 // ValidateMsgHeader does some simple validation of the header in a raw
 // data buffer.
 func ValidateMsgHeader(msgData []byte) bool {
@@ -348,6 +325,31 @@ func onDisconnect(con Connection) {
 	if eventHandler != nil {
 		eventHandler.OnDisconnect(con)
 	}
+}
+
+// onTimeout calls the existing EventHandler implementation's OnTimeout function
+// to notify higher level clients about network timeout events.
+func onTimeout(
+	timeoutType int,
+	messageType uint16,
+	parentId uint32,
+	data interface{},
+) {
+	eventMutex.RLock()
+	defer eventMutex.RUnlock()
+
+	if eventHandler == nil {
+		return
+	}
+
+	timeout := TimeoutEvent{
+		Data:        data,
+		MessageType: messageType,
+		ParentId:    parentId,
+		TimeoutType: timeoutType,
+	}
+
+	eventHandler.OnTimeout(&timeout)
 }
 
 // routeMsg takes an incoming Msg and routes it to the appropriate protocol

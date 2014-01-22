@@ -21,20 +21,23 @@ import (
 
 // Stdlib imports.
 import (
+	"os"
 	"sync"
 )
 
 // Application properties.
 var (
 	appName     string
+	exitCode    = 0
 	initialized = false
 )
 
 // Synchronization helpers.
 var (
-	msgPump = make(chan bool, 1)
-	mutex   sync.Mutex
-	syncObj = lifecycle.New()
+	msgPump  = make(chan bool, 1)
+	mutex    sync.Mutex
+	stopChan chan bool
+	syncObj  = lifecycle.New()
 )
 
 // Application interface instances.
@@ -120,6 +123,12 @@ func SetCrashHandler(obj CrashHandler) {
 	crashHandler = obj
 }
 
+// SetExitCode sets the exit code the application should return
+// when shutdown is complete.
+func SetExitCode(code int) {
+	exitCode = code
+}
+
 // SetHeartbeat sets and, if appropriate, starts the heartbeat of the
 // GoApp.
 func SetHeartbeat(intervalMs int) {
@@ -140,13 +149,17 @@ func SetLoopHandler(obj LoopHandler) {
 }
 
 // Start sets the GoApp's name and starts its execution.
-func Start(name string) {
-	startApp(name)
+func Start(name string, callback chan bool) {
+	stopChan = callback
+	go startApp(name)
 }
 
 // Stop begins the shutdown process of the application.
 func Stop() {
-	syncObj.Shutdown()
+	go func() {
+		syncObj.Shutdown()
+		stopChan<- true
+	}()
 }
 
 // handlePanic is called on the way out of the startApp function. It
@@ -216,4 +229,6 @@ func internalStop() {
 	appCloser.PostShutdown()
 
 	syncObj.ShutdownComplete()
+
+	os.Exit(exitCode)
 }

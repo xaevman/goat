@@ -33,6 +33,9 @@ const (
 	CHAT_MSG = iota
 )
 
+// Timeout value for sends.
+const CHAT_MSG_SEND_TIMEOUT_SEC = 5
+
 // Msg subtypes
 const (
 	MSG_SUB_CHAT = iota
@@ -47,6 +50,9 @@ const (
 const (
 	PUB_CHANNEL = "public"
 )
+
+// Network protocol object.
+var Protocol = net.NewProtocol(CHAT_MOD_NAME)
 
 
 // Msg represents a message sent from one client to the chat system.
@@ -169,8 +175,9 @@ func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
 
 	dataBuffer := SerializeMsg(msgObj)
 	netMsg     := net.Msg {
-		Data:   dataBuffer,
-		Header: this.Signature(),
+		Data:       dataBuffer,
+		Header:     this.Signature(),
+		TimeoutSec: CHAT_MSG_SEND_TIMEOUT_SEC,
 	}
 
 	return this.parent.SendMsg(targetId, &netMsg)

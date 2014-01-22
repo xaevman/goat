@@ -30,7 +30,11 @@ func TestDefaultApp(t *testing.T) {
 
 	SetHeartbeat(1 * 1000)	// sec * ms
 	go waitForShutdown()
-	Start("DefaultApp")
+
+	stopChan := make(chan bool, 0)
+	Start("DefaultApp", stopChan)
+
+	<-stopChan
 }
 
 // waitForShutdown waits 10 seconds and then starts the application shutdown

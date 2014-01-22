@@ -249,7 +249,7 @@ func (this *tcpCon) Send(data []byte, timeoutSec int) {
 	case this.writeChan <- data:
 	case <-time.After(time.Duration(timeoutSec) * time.Second):
 		sig := GetMsgSig(GetMsgHeader(data))
-		Timeout(TIMEOUT_SEND, sig, this.id, nil)
+		onTimeout(TIMEOUT_SEND, sig, this.id, data)
 	}
 }
 
@@ -328,7 +328,6 @@ func (this *tcpCon) handleWrites() {
 
 			if err != nil {
 				log.Error("%v", err)
-				continue
 			}
 		}
 	}
@@ -352,8 +351,10 @@ func (this *tcpCon) runCli() {
 	for this.syncObj.QueryRun() {
 		select {
 		case data := <-this.readChan:
-			for pending := this.buildMsg(data); pending != nil; pending = this.buildMsg(pending) {
-			}
+			for 
+				pending := this.buildMsg(data)
+				pending != nil
+				pending = this.buildMsg(pending) {}
 		case <-this.syncObj.QueryShutdown():
 		}
 	}

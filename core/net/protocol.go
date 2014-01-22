@@ -15,6 +15,7 @@ package net
 // External imports.
 import (
 	"github.com/xaevman/goat/core/log"
+	"github.com/xaevman/goat/lib/math"
 	"github.com/xaevman/goat/lib/perf"
 )
 
@@ -428,7 +429,13 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 		}
 	}
 
-	cli.Send(msg.GetBytes(), msg.TimeoutSec)
+	timeoutSec := math.IClamp(
+		msg.TimeoutSec, 
+		MIN_SEND_TIMEOUT_SEC, 
+		MAX_SEND_TIMEOUT_SEC,
+
+	)
+	cli.Send(msg.GetBytes(), timeoutSec)
 
 	this.perfs.Increment(PERF_SEND_COUNT)
 

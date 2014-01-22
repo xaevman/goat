@@ -55,7 +55,7 @@ func (this *EventChan) OnConnect(con Connection) {
 	select {
 	case this.conChan <- con:
 	case <-time.After(DEFAULT_TIMEOUT_SEC * time.Second):
-		Timeout(TIMEOUT_CONNECT, 0, con.Id(), con)
+		onTimeout(TIMEOUT_CONNECT, 0, con.Id(), con)
 	}
 }
 
@@ -68,7 +68,7 @@ func (this *EventChan) OnDisconnect(con Connection) {
 	select {
 	case this.discoChan <- con:
 	case <-time.After(DEFAULT_TIMEOUT_SEC * time.Second):
-		Timeout(TIMEOUT_DISCONNECT, 0, con.Id(), con)
+		onTimeout(TIMEOUT_DISCONNECT, 0, con.Id(), con)
 	}
 }
 
@@ -79,7 +79,7 @@ func (this *EventChan) OnDisconnect(con Connection) {
 // inserting QueryTimeout() into your channel based IO logic.
 func (this *EventChan) OnTimeout(timeout *TimeoutEvent) {
 	select {
-	case <-this.timeoutChan:
+	case this.timeoutChan <- timeout:
 	case <-time.After(DEFAULT_TIMEOUT_SEC * time.Second):
 		log.Error("Timeout sending timeout event (ouch): %v", timeout)
 	}

@@ -16,6 +16,7 @@ package log
 import (
     "fmt"
     "github.com/xaevman/goat/lib/lifecycle"
+    "os"
     "runtime"
     "sync"
     "time"
@@ -67,7 +68,7 @@ func Crash(format string, v ...interface{}) {
     msg := getLogMsg(format, "CRASH", v...)
 
     if !initialized {
-        fmt.Println(msg)
+        fmt.Fprintln(os.Stderr, msg)
         return
     }
 
@@ -84,7 +85,7 @@ func Debug(format string, v ...interface{}) {
     msg := getLogMsg(format, "DEBUG", v...)
 
     if !initialized {
-        fmt.Println(msg)
+        fmt.Fprintln(os.Stdout, msg)
         return
     }
 
@@ -96,7 +97,7 @@ func Error(format string, v ...interface{}) {
     msg := getLogMsg(format, "ERROR", v...)
 
     if !initialized {
-        fmt.Println(msg)
+        fmt.Fprintln(os.Stderr, msg)
         return
     }
 
@@ -123,7 +124,7 @@ func Info(format string, v ...interface{}) {
     msg := getLogMsg(format, "INFO", v...)
 
     if !initialized {
-        fmt.Println(msg)
+        fmt.Fprintln(os.Stdout, msg)
         return
     }
 
