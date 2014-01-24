@@ -2,7 +2,7 @@
 //
 //  all_test.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -17,12 +17,12 @@ import (
 	"github.com/xaevman/goat/lib/str"
 )
 
-import(
+import (
 	"hash/crc32"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
-	"sync/atomic"
 )
 
 // Message type IDs.
@@ -31,28 +31,27 @@ const (
 	PONG_MSG_TYPE = 26
 )
 
-
 // Header values for HeaderOps test.
-var headerTests = []uint16 {
+var headerTests = []uint16{
 	0, 1, 4, 31, 64, 501, 1002, 1023,
 }
 
 // Shared data for TCP test.
 var (
-	msgCount uint64 = 0
-	pingMsgProc     = new(PingMsgProc)
-	pingTxt         = "ping"
-	pongMsgProc     = new(PongMsgProc)
-	pongTxt         = "pong"
-	proto           = NewProtocol("TestProto")
-	srvAddr         = "127.0.0.1:6600"
+	msgCount    uint64 = 0
+	pingMsgProc        = new(PingMsgProc)
+	pingTxt            = "ping"
+	pongMsgProc        = new(PongMsgProc)
+	pongTxt            = "pong"
+	proto              = NewProtocol("TestProto")
+	srvAddr            = "127.0.0.1:6600"
 )
-
 
 // Ping message processor
 type PingMsgProc struct {
 	parent *Protocol
 }
+
 func (this *PingMsgProc) Close() {}
 func (this *PingMsgProc) Init(proto *Protocol) {
 	this.parent = proto
@@ -83,11 +82,11 @@ func (this *PingMsgProc) Signature() uint16 {
 	return PING_MSG_TYPE
 }
 
-
 // Pong message processor
 type PongMsgProc struct {
 	parent *Protocol
 }
+
 func (this *PongMsgProc) Close() {}
 func (this *PongMsgProc) Init(proto *Protocol) {
 	this.parent = proto
@@ -115,8 +114,7 @@ func (this *PongMsgProc) Signature() uint16 {
 	return PONG_MSG_TYPE
 }
 
-
-// TestHeaderOpts runs all of the header set and get options on a variety 
+// TestHeaderOpts runs all of the header set and get options on a variety
 // of header message type signatures.
 func TestHeaderOps(t *testing.T) {
 	for i := range headerTests {
@@ -140,15 +138,12 @@ func TestTCPSrv(t *testing.T) {
 	<-time.After(1 * time.Second)
 
 	// run the tests
-	runSimpleTcpTest(1,   1,    t)
-	runSimpleTcpTest(1,   10,   t)
-	runSimpleTcpTest(1,   100,  t)
-	runSimpleTcpTest(10,  1,    t)
-	runSimpleTcpTest(10,  10,   t)
-	runSimpleTcpTest(10,  100,  t)
-	runSimpleTcpTest(100, 1,    t)
-	runSimpleTcpTest(100, 10,   t)
-	runSimpleTcpTest(100, 100,  t)
+	runSimpleTcpTest(1, 1, t)
+	runSimpleTcpTest(1, 10, t)
+	runSimpleTcpTest(1, 100, t)
+	runSimpleTcpTest(10, 1, t)
+	runSimpleTcpTest(10, 10, t)
+	runSimpleTcpTest(10, 100, t)
 
 	// shut everything down gracefully
 	proto.Shutdown()
@@ -156,8 +151,6 @@ func TestTCPSrv(t *testing.T) {
 }
 
 func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
-	log.DebugLogs = true
-
 	log.Info("SimpleTcpTest (%v clients, %v msg/cli", cliCount, sendCount)
 
 	proto.perfs.Reset()
@@ -175,14 +168,13 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 		cliList = append(cliList, cli)
 	}
 
-
 	log.Info("%v clients connected", len(cliList))
 	doneChan := make(chan bool)
 	<-time.After(2 * time.Second)
-    
-    start := time.Now()
 
-    for i := range cliList {
+	start := time.Now()
+
+	for i := range cliList {
 		go runClient(cliList[i], sendCount, doneChan, t)
 	}
 
@@ -191,7 +183,7 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 	}
 
 	runTime := time.Since(start)
-	
+
 	<-time.After(1 * time.Second)
 
 	perfTotal := proto.perfs.Get(PERF_SEND_TOTAL)
@@ -216,11 +208,11 @@ func runClient(cli *TCPCli, sendCount int, doneChan chan bool, t *testing.T) {
 		atomic.AddUint64(&msgCount, 1)
 
 		// simulate a normal amount of internet latency
-		<-time.After(time.Duration(rand.Intn(5) + 15) * time.Millisecond)
+		<-time.After(time.Duration(rand.Intn(5)+15) * time.Millisecond)
 	}
 
 	cli.Shutdown()
-	doneChan<- true
+	doneChan <- true
 }
 
 // testHeaders is a generalized function for testing all of the get and set
@@ -228,10 +220,10 @@ func runClient(cli *TCPCli, sendCount int, doneChan chan bool, t *testing.T) {
 func testHeaders(msgSig uint16, t *testing.T) {
 	log.Info("Testing headers with type %v", msgSig)
 
-	text    := "This is a test message"
+	text := "This is a test message"
 	msgSize := uint16(len(text))
-	buffer  := make([]byte, msgSize + HEADER_LEN_B)
-	header  := uint64(0)
+	buffer := make([]byte, msgSize+HEADER_LEN_B)
+	header := uint64(0)
 
 	SetMsgSig(&header, msgSig)
 
@@ -257,10 +249,10 @@ func testHeaders(msgSig uint16, t *testing.T) {
 	// round trip and test header, payload, and flags
 	SetMsgHeader(header, buffer)
 	SetMsgPayload([]byte(text), buffer)
-	rtPayload  := string(GetMsgPayload(buffer))
-	rtHeader   := GetMsgHeader(buffer)
-	rtMsgSig   := GetMsgSig(rtHeader)
-	rtMsgSize  := GetMsgSize(rtHeader)
+	rtPayload := string(GetMsgPayload(buffer))
+	rtHeader := GetMsgHeader(buffer)
+	rtMsgSig := GetMsgSig(rtHeader)
+	rtMsgSize := GetMsgSize(rtHeader)
 	rtChecksum := GetMsgChecksum(rtHeader)
 	rtDataHash := crc32.ChecksumIEEE(GetMsgPayload(buffer))
 
@@ -293,4 +285,3 @@ func testHeaders(msgSig uint16, t *testing.T) {
 
 	log.Info("TestHeaderOps[%v]: passed", msgSig)
 }
-

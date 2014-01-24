@@ -14,6 +14,9 @@ _test
 # logs
 *.log
 
+# scripts
+*.test.sh
+
 *.cgo1.go
 *.cgo2.c
 _cgo_defun.c
