@@ -297,12 +297,24 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	defer this.perfs.Increment(PERF_RCV_TOTAL)
 	defer this.perfs.Increment(PERF_MSG_TOTAL)
 
-	access := this.getAccess(msg.Con)
+	if !msg.isValid() {
+		log.Error("Malformed message received (checksum mismatch")
+		return
+	}
+
+	msgCon := msg.Connection()
+	if msgCon == nil {
+		log.Error("Malformed message received (Connection nil)")
+		return
+	}
+
+	access := this.getAccess(msgCon)
 	if access < 1 {
 		return
 	}
 
-	sig := GetMsgSig(msg.Header)
+	msgHeader := msg.GetHeader()
+	sig       := GetMsgSig(msgHeader)
 
 	this.objMutex.RLock()
 	defer this.objMutex.RUnlock()
@@ -310,14 +322,17 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	proc := this.sigMap[sig]
 
 	if proc == nil {
-		log.Debug("No valid message processor (sig %v). Dropping message", sig)
-		go msg.Con.Close()
+		log.Error(
+			"No valid message processor (sig %v). Dropping message", 
+			sig,
+		)
+		go msgCon.Close()
 		return
 	}
 
-	if GetMsgEncryptedFlag(msg.Header) {
+	if GetMsgEncryptedFlag(msgHeader) {
 		if this.crypto == nil {
-			log.Debug(
+			log.Error(
 				"Encryption flag set, but no encrpytion provider."+
 					"Dropping message (proto: %s)",
 				this.name,
@@ -327,7 +342,7 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 
 		err := this.crypto.Decrypt(msg)
 		if err != nil {
-			log.Debug(
+			log.Error(
 				"Error decrypting message (proto: %s, err: %v)",
 				this.name,
 				err,
@@ -336,9 +351,9 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 		}
 	}
 
-	if GetMsgCompressedFlag(msg.Header) {
+	if GetMsgCompressedFlag(msgHeader) {
 		if this.compressor == nil {
-			log.Debug(
+			log.Error(
 				"Compression flag set, but no compression provider."+
 					"Dropping message (proto: %s)",
 				this.name,
@@ -348,7 +363,7 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 
 		err := this.compressor.Decompress(msg)
 		if err != nil {
-			log.Debug(
+			log.Error(
 				"Error decompressing message (proto: %s, err: %v)",
 				this.name,
 				err,
@@ -359,7 +374,7 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 
 	err := proc.ReceiveMsg(msg, access)
 	if err != nil {
-		log.Debug(
+		log.Error(
 			"Error processing message (proto: %s, err: %v)",
 			this.name,
 			err,
@@ -389,7 +404,9 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 	this.objMutex.RLock()
 	defer this.objMutex.RUnlock()
 
-	sig := GetMsgSig(msg.Header)
+	msgHeader := msg.GetHeader()
+	sig       := GetMsgSig(msgHeader)
+
 	if this.sigMap[sig] == nil {
 		return errors.New(fmt.Sprintf(
 			"Can't send a message for an unregistered message type "+
@@ -398,7 +415,7 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 		))
 	}
 
-	if GetMsgCompressedFlag(msg.Header) {
+	if GetMsgCompressedFlag(msgHeader) {
 		if this.compressor == nil {
 			return errors.New(
 				"Compression bit set, but no CompressionProvider " +
@@ -414,7 +431,7 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 		}
 	}
 
-	if GetMsgEncryptedFlag(msg.Header) {
+	if GetMsgEncryptedFlag(msgHeader) {
 		if this.crypto == nil {
 			return errors.New(
 				"Encryption bit set, but no CryptoProvider registered.",
@@ -430,7 +447,7 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 	}
 
 	timeoutSec := math.IClamp(
-		msg.TimeoutSec, 
+		msg.TimeoutSec(), 
 		MIN_SEND_TIMEOUT_SEC, 
 		MAX_SEND_TIMEOUT_SEC,
 

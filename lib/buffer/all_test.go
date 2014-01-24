@@ -134,28 +134,40 @@ func TestRoundTrips(t *testing.T) {
 	cursor = 0
 
 	for k, _ := range testStr {
-		val := ReadString(buffer, &cursor)
+		val, err := ReadString(buffer, &cursor)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !str.StrEq(val, k) {
 			t.Fatalf("Values don't match: %v != %v", val, k)
 		}
 	}
 
 	for i := range testByte {
-		val := ReadByte(buffer, &cursor)
+		val, err := ReadByte(buffer, &cursor)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if val != testByte[i] {
 			t.Fatalf("Values don't match: %v != %v", val, testByte[i])
 		}
 	}
 
 	for i := range testUint32 {
-		val := ReadUint32(buffer, &cursor)
+		val, err := ReadUint32(buffer, &cursor)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if val != testUint32[i] {
 			t.Fatalf("Values don't match: %v != %v", val, testUint32[i])
 		}
 	}
 
 	for i := range testUint64 {
-		val := ReadUint64(buffer, &cursor)
+		val, err := ReadUint64(buffer, &cursor)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if val != testUint64[i] {
 			t.Fatalf("Values don't match: %v != %v", val, testUint64[i])
 		}

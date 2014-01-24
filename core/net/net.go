@@ -25,7 +25,8 @@
 //
 // [0-1]     msgtype (bits 1-10 for 1024 unique msg types), flags (bits 11-16)
 // [2-3]     msgsize (uint16)
-// [4-32767] payload is msg size - 2
+// [4-7]	 crc32 checksum of payload (uint32)
+// [8-32767] payload is msg size
 package net
 
 // External imports.
@@ -35,6 +36,7 @@ import (
 
 // Stdlib imports.
 import (
+	"hash/crc32"
 	"net"
 	"sync"
 )
@@ -48,7 +50,7 @@ const (
 
 // Message header constants.
 const (
-	HEADER_LEN_B    = 4
+	HEADER_LEN_B    = 8
 	MAX_MSG_TYPE    = 1023
 	MAX_NET_MSG_LEN = 32 * 1024
 )
@@ -155,56 +157,71 @@ func GetEventHandler() EventHandler {
 
 // GetMsgCompressedFlag retrieves bit 11 of the message header, which is used
 // to specify whether the message data itself is compressed or not.
-func GetMsgCompressedFlag(header uint16) bool {
+func GetMsgCompressedFlag(header uint64) bool {
 	return (header & (1 << msgCompressedOffset)) != 0
 }
 
 // GetMsgEncryptedFlag retrieves bit 12 of the message header, which is used
 // to specify whether the message data itself is encrypted or not.
-func GetMsgEncryptedFlag(header uint16) bool {
+func GetMsgEncryptedFlag(header uint64) bool {
 	return (header & (1 << msgEncryptedOffset)) != 0
 }
 
-// GetMsgHeader retrieves the first 2 byte header of raw line data.
-// Packed into the header is the message type signature and flags specifying
-// whether the data payload is compressed and/or encrypted.
-func GetMsgHeader(msgData []byte) uint16 {
-	if len(msgData) < 2 {
-		panic("msgData buffer less than 2 bytes")
+// GetMsgHeader retrieves the 64bit header from a raw message buffer.
+func GetMsgHeader(msgData []byte) uint64 {
+	if len(msgData) < HEADER_LEN_B {
+		panic("msgData buffer less than 8 bytes")
 	}
 
-	header := uint16(msgData[0])<<8 | uint16(msgData[1])
+	header := uint64(msgData[0]) << 56 | 
+		uint64(msgData[1]) << 48 |
+		uint64(msgData[2]) << 40 |
+		uint64(msgData[3]) << 32 |
+		uint64(msgData[4]) << 24 |
+		uint64(msgData[5]) << 16 |
+		uint64(msgData[6]) << 8  |
+		uint64(msgData[7])
 
 	return header
 }
 
 // GetMsgPayload returns the payload portion of a raw message buffer.
 func GetMsgPayload(msgData []byte) []byte {
-	if len(msgData) < 4 {
-		panic("msgData buffer less than 2 bytes")
+	if len(msgData) < HEADER_LEN_B {
+		panic("msgData buffer not large enough to contain a message")
 	}
 
-	size := GetMsgSize(msgData)
+	header := GetMsgHeader(msgData)
+	size   := GetMsgSize(header)
 
-	return msgData[4 : size+4]
+	return msgData[HEADER_LEN_B : HEADER_LEN_B + size]
 }
 
 // GetMsgSig retrieves the message type signature out of a raw message header.
-func GetMsgSig(header uint16) uint16 {
-	sig := header &^ msgTypeMask
+func GetMsgSig(header uint64) uint16 {
+	sig := uint16(header) &^ msgTypeMask
 
 	return sig
 }
 
-// GetMsgSize retrieves the data size property from raw line data.
-func GetMsgSize(msgData []byte) uint16 {
-	if len(msgData) < 4 {
-		panic("msgData buffer less than 4 bytes")
-	}
+// GetMsgSigPart returns the message signature portion of a uint16 value.
+func GetMsgSigPart(value uint16) uint16 {
+	sig := value &^ msgTypeMask
+	return sig
+}
 
-	size := uint16(msgData[2])<<8 | uint16(msgData[3])
+// GetMsgSize retrieves the data size property from a 64bit header.
+func GetMsgSize(header uint64) uint16 {
+	size := uint16(header >> 16)
 
 	return size
+}
+
+// GetMsgChecksum retrieves the checksum field from raw line data.
+func GetMsgChecksum(header uint64) uint32 {
+	hash := uint32(header >> 32)
+
+	return hash
 }
 
 // SetEventHandler sets the EventHandler object responsible for passing
@@ -217,9 +234,15 @@ func SetEventHandler(handler EventHandler) {
 	eventHandler = handler
 }
 
+// SetMsgChecksum sets bytes 4-8 to the computed crc32 hash of the payload
+// data.
+func SetMsgChecksum(header *uint64, hash uint32) {
+	*header = *header | uint64(hash) << 32
+}
+
 // SetMsgCompressedFlag sets bit 11 of a raw header object, which is used to
 // specify whether the following data block is compressed or not.
-func SetMsgCompressedFlag(header *uint16, val bool) {
+func SetMsgCompressedFlag(header *uint64, val bool) {
 	if val {
 		*header = *header | (1 << msgCompressedOffset)
 	} else {
@@ -229,7 +252,7 @@ func SetMsgCompressedFlag(header *uint16, val bool) {
 
 // SetMsgEncryptedFlag sets bit 12 of a raw header object, which is used to
 // specify whether the following data block is encrypted or not.
-func SetMsgEncryptedFlag(header *uint16, val bool) {
+func SetMsgEncryptedFlag(header *uint64, val bool) {
 	if val {
 		*header = *header | (1 << msgEncryptedOffset)
 	} else {
@@ -237,38 +260,58 @@ func SetMsgEncryptedFlag(header *uint16, val bool) {
 	}
 }
 
-// SetMsgHeader sets the first two bytes of a raw data buffer with the supplied
+// SetMsgHeader sets the first 8 bytes of a raw data buffer with the supplied
 // header.
-func SetMsgHeader(header uint16, msgData []byte) {
-	if len(msgData) < 2 {
+func SetMsgHeader(header uint64, msgData []byte) {
+	if len(msgData) < HEADER_LEN_B {
 		panic("msgData buffer less than 2 bytes")
 	}
 
-	msgData[0] = byte(header >> 8)
-	msgData[1] = byte(header)
+	msgData[0] = byte(header >> 56)
+	msgData[1] = byte(header >> 48)
+	msgData[2] = byte(header >> 40)
+	msgData[3] = byte(header >> 32)
+	msgData[4] = byte(header >> 24)
+	msgData[5] = byte(header >> 16)
+	msgData[6] = byte(header >>  8)
+	msgData[7] = byte(header)
 }
 
 // SetMsgPayload takes the supplied message payload, sets the message size
-// property and also copies the message payload into the raw buffer.
+// property, computes and sets the checksum property, and also copies 
+// the message payload into the raw buffer.
 func SetMsgPayload(data, msgData []byte) {
-	SetMsgSize(len(data), msgData)
-	copy(msgData[4:], data)
+	header := GetMsgHeader(msgData)
+	SetMsgSize(&header, len(data))
+	SetMsgChecksum(&header, crc32.ChecksumIEEE(data))
+	SetMsgHeader(header, msgData)
+
+	copy(msgData[HEADER_LEN_B:], data)
+}
+
+// SetMsgSig sets the first 10 bits of a message header with the supplied
+// msgType.
+func SetMsgSig(header *uint64, msgType uint16) {
+	if msgType > MAX_MSG_TYPE {
+		panic("msgType > MAX_MSG_TYPE")
+	}
+
+	*header = *header | uint64(GetMsgSigPart(msgType))
 }
 
 // SetMsgSize sets the message size property on a raw data buffer.
-func SetMsgSize(size int, msgData []byte) {
-	if len(msgData) < 4 {
-		panic("msgData buffer less than 4 bytes")
+func SetMsgSize(header *uint64, size int) {
+	if size > MAX_NET_MSG_LEN {
+		panic("Message size > MAX_NET_MSG_LEN")
 	}
 
-	msgData[2] = byte(size >> 8)
-	msgData[3] = byte(size)
+	*header = *header | uint64(size) << 16
 }
 
 // ValidateMsgHeader does some simple validation of the header in a raw
 // data buffer.
 func ValidateMsgHeader(msgData []byte) bool {
-	return len(msgData) > 3
+	return len(msgData) >= HEADER_LEN_B
 }
 
 // onConnect is called by appropriate, connection-based client and server
@@ -355,7 +398,7 @@ func onTimeout(
 // routeMsg takes an incoming Msg and routes it to the appropriate protocol
 // if one is registered in the route map, otherwise the message is dropped.
 func routeMsg(msg *Msg) {
-	sig := GetMsgSig(msg.Header)
+	sig := GetMsgSig(msg.GetHeader())
 
 	routeMutex.RLock()
 	proto := sigMap[sig]

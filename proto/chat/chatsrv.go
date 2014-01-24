@@ -132,6 +132,8 @@ func (this *ChatSrv) distChatMsg(msg *Msg) {
 		return
 	}
 
+	msg.From = this.userMap[msg.FromId]
+
 	this.send(msg.ChannelId, msg)
 }
 

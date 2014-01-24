@@ -263,10 +263,8 @@ func (this *tcpCon) buildMsg(msgData []byte) []byte {
 	}
 
 	if this.nextMsg == nil {
-		this.nextMsg = &Msg{
-			Con:       this,
-			hdrBuffer: make([]byte, 4),
-		}
+		this.nextMsg = NewMsg()
+		this.nextMsg.SetConnection(this)
 	}
 
 	// read available data, up to msg length

@@ -16,18 +16,13 @@ package main
 import (
 	"github.com/xaevman/goat/core/goapp"
 	"github.com/xaevman/goat/core/log"
-	"github.com/xaevman/goat/lib/fs"
 	"github.com/xaevman/goat/proto/chat"
 )
 
 // Stdlib imports.
 import (
-	"bufio"
-	"io"
 	"os"
 	"strconv"
-	"strings"
-	"time"
 )
 
 // Configurable settings.
@@ -37,21 +32,9 @@ var (
 	myName   = "Anon"
 	srvAddr  = "127.0.0.1:8900"
 )
-// Test counters.
-var (
-	errors     = 0
-	success    = 0
-	startTime  time.Time
-	testCount  = 0
-	testCursor = 0
-	totalIndex = 0
-)	
 
-// Current channel.
-var currentChan uint32 = 0
-
-// Chat text list.
-var myPhrases = make([]string, 0)
+// ChatCli notifier.
+var adapter *ChatTest
 
 
 // ChatTestStarter is a goapp.AppStarter implementation which sends
@@ -65,7 +48,7 @@ func (this *ChatTestStarter) PreInit() {
 	}
 	if len(os.Args) > 2 {
 		myIndex, _ = strconv.Atoi(os.Args[2])
-		myName     = os.Args[2]
+		myName     = "chattest" + os.Args[2]
 	}
 	if len(os.Args) > 3 {
 		maxTests, _ = strconv.Atoi(os.Args[3])
@@ -79,27 +62,11 @@ func (this *ChatTestStarter) PreInit() {
 	)
 }
 func (this *ChatTestStarter) PostInit() {
-	// find my sentences
-	file, _ := fs.OpenFile("./sentences.data")
-	reader  := bufio.NewReader(file)
-	for 
-		line, err := reader.ReadString('.')
-		err != io.EOF
-		line, err = reader.ReadString('.') {
-
-		line = strings.TrimSpace(line)
-		myPhrases = append(myPhrases, line) 
-	}
-
-	log.Info("Total phrases: %d", len(myPhrases))
-
 	// connect
-	adapter := new(ChatTest)
+	adapter  = NewChatTest(myIndex)
 	chatCli := chat.NewChatCli(adapter)
 	chatCli.SetUsername(myName)
 
-	startTime = time.Now()
-	
 	err := chatCli.Connect(srvAddr)
 	if err != nil {
 		goapp.Stop()
@@ -111,8 +78,9 @@ func (this *ChatTestStarter) PostInit() {
 // the results of this client's part of the stress test.
 type ChatTestCloser struct {}
 
-func (this *ChatTestCloser) PreShutdown() {
-	exeTime := time.Since(startTime)
+func (this *ChatTestCloser) PreShutdown() {}
+func (this *ChatTestCloser) PostShutdown() {
+	success, errors, exeTime := adapter.GetResults()
 
 	log.Info(
 		"TEST RESULTS (Success: %d, Failure: %d)",
@@ -127,13 +95,12 @@ func (this *ChatTestCloser) PreShutdown() {
 		"TEST RESULTS (%.2f msg/sec)",
 		float64(maxTests) / exeTime.Seconds(),
 	)
-}
-func (this *ChatTestCloser) PostShutdown() {
-	if success == len(myPhrases) {
+
+	if success == maxTests {
 		goapp.SetExitCode(0)
 	}
 
-	goapp.SetExitCode(errors)
+	goapp.SetExitCode(errors)	
 }
 
 

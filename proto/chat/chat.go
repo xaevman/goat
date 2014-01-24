@@ -54,6 +54,12 @@ const (
 // Network protocol object.
 var Protocol = net.NewProtocol(CHAT_MOD_NAME)
 
+// Common error messages.
+var (
+	errDeserializeFailed = errors.New("Deserialization of chat.Msg failed")
+	errConNil            = errors.New("net.Msg.Connection() is nil")
+)
+
 
 // Msg represents a message sent from one client to the chat system.
 // ChannelId is the channel that the message is being sent to. From is the 
@@ -91,13 +97,26 @@ func (this *Msg) Duplicate() *Msg {
 func DeserializeMsg(data []byte) *Msg {
 	var cursor int = 0
 
-	msg           := new(Msg)
-	msg.ChannelId  = buffer.ReadUint32(data, &cursor)
-	msg.From       = buffer.ReadString(data, &cursor)
-	msg.FromId     = buffer.ReadUint32(data, &cursor)
-	msg.Subtype    = buffer.ReadByte(data, &cursor)
-	msg.ToId       = buffer.ReadUint32(data, &cursor)
-	msg.Text       = buffer.ReadString(data, &cursor)
+	var err error
+	msg := new(Msg)
+
+	msg.ChannelId, err = buffer.ReadUint32(data, &cursor)
+	if err != nil { return nil }
+
+	msg.From, err = buffer.ReadString(data, &cursor)
+	if err != nil { return nil }
+	
+	msg.FromId, err = buffer.ReadUint32(data, &cursor)
+	if err != nil { return nil }
+	
+	msg.Subtype, err = buffer.ReadByte(data, &cursor)
+	if err != nil { return nil }
+	
+	msg.ToId, err = buffer.ReadUint32(data, &cursor)
+	if err != nil { return nil }
+	
+	msg.Text, err = buffer.ReadString(data, &cursor)
+	if err != nil { return nil }
 
 	return msg
 }
@@ -155,9 +174,18 @@ func (this *MsgHandler) QueryReceiveMsg() <-chan *Msg {
 // on the line. New Msg objects, once built, are sent to the receive channel
 // which can be queried via QueryReceiveMsg().
 func (this *MsgHandler) ReceiveMsg(msg *net.Msg, access byte) error {
-	chatMsg       := DeserializeMsg(msg.Data)
+	chatMsg := DeserializeMsg(msg.GetPayload())
+	if chatMsg == nil {
+		return errDeserializeFailed
+	}
+
+	con := msg.Connection()
+	if con == nil {
+		return errConNil
+	}
+
 	chatMsg.Access = access
-	chatMsg.FromId = msg.Con.Id()
+	chatMsg.FromId = con.Id()
 
 	this.rcvChan<- chatMsg
 
@@ -174,13 +202,12 @@ func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
 	}
 
 	dataBuffer := SerializeMsg(msgObj)
-	netMsg     := net.Msg {
-		Data:       dataBuffer,
-		Header:     this.Signature(),
-		TimeoutSec: CHAT_MSG_SEND_TIMEOUT_SEC,
-	}
+	netMsg     := net.NewMsg()
+	netMsg.SetMsgType(this.Signature())
+	netMsg.SetPayload(dataBuffer)
+	netMsg.SetTimeout(CHAT_MSG_SEND_TIMEOUT_SEC)
 
-	return this.parent.SendMsg(targetId, &netMsg)
+	return this.parent.SendMsg(targetId, netMsg)
 }
 
 // Signature returns CHAT_MSG.

@@ -14,12 +14,25 @@
 // types into and out of byte slices.
 package buffer
 
+// Stdlib imports.
+import (
+	"errors"
+)
+
+// Data type sizes.
 const (
 	BYTE_SIZE   = 1
 	UINT8_SIZE  = 1
 	UINT16_SIZE = 2
 	UINT32_SIZE = 4
 	UINT64_SIZE = 8
+)
+
+// Common errors.
+var (
+	errExceedBounds = errors.New(
+		"Index exceeds capacity of slice/array",
+	)
 )
 
 // LenByte returns the encoded length of a byte value.
@@ -56,28 +69,47 @@ func LenUint64() int {
 // ReadByte reads 1 byte value from the given buffer, starting at
 // the given offset, and increments teh supplied cursor by the length
 // of the encoded value.
-func ReadByte(buffer []byte, cursor *int) byte {
+func ReadByte(buffer []byte, cursor *int) (byte, error) {
+	if *cursor + BYTE_SIZE > len(buffer) {
+		*cursor = len(buffer)
+		return 0, errExceedBounds
+	}
+
 	val := buffer[*cursor]
 	*cursor++
 
-	return val
+	return val, nil
 }
 
 // ReadString reads 1 string value from the given buffer, starting at
 // the given offset, and increments teh supplied cursor by the length
 // of the encoded value.
-func ReadString(buffer []byte, cursor *int) string {
-	size    := ReadUint32(buffer, cursor)
+func ReadString(buffer []byte, cursor *int) (string, error) {
+	size, err := ReadUint32(buffer, cursor)
+	if err != nil {
+		return "", err
+	}
+
+	if *cursor + int(size) > len(buffer) {
+		*cursor = len(buffer)
+		return "", errExceedBounds
+	}
+
 	val     := string(buffer[*cursor:*cursor + int(size)])
 	*cursor += len(val)
 
-	return val
+	return val, nil
 }
 
 // ReadUint32 reads 1 uint32 value from the given buffer, starting at
 // the given offset, and increments teh supplied cursor by the length
 // of the encoded value.
-func ReadUint32(buffer []byte, cursor *int) uint32 {
+func ReadUint32(buffer []byte, cursor *int) (uint32, error) {
+	if *cursor + UINT32_SIZE > len(buffer) {
+		*cursor = len(buffer)
+		return 0, errExceedBounds
+	}
+
 	val := 
 		uint32(buffer[*cursor])     << 24 | 
 		uint32(buffer[*cursor + 1]) << 16 |
@@ -86,13 +118,18 @@ func ReadUint32(buffer []byte, cursor *int) uint32 {
 
 	*cursor += UINT32_SIZE
 
-	return val
+	return val, nil
 }
 
 // ReadUint64 reads 1 uint64 value from the given buffer, starting at
 // the given offset, and increments teh supplied cursor by the length
 // of the encoded value.
-func ReadUint64(buffer []byte, cursor *int) uint64 {
+func ReadUint64(buffer []byte, cursor *int) (uint64, error) {
+	if *cursor + UINT64_SIZE > len(buffer) {
+		*cursor = len(buffer)
+		return 0, errExceedBounds
+	}
+
 	val := 
 		uint64(buffer[*cursor])     << 56 | 
 		uint64(buffer[*cursor + 1]) << 48 |
@@ -105,7 +142,7 @@ func ReadUint64(buffer []byte, cursor *int) uint64 {
 
 	*cursor += UINT64_SIZE
 
-	return val
+	return val, nil
 }
 
 // WriteByte writes the given byte value into a buffer at the given

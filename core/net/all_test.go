@@ -18,6 +18,7 @@ import (
 )
 
 import(
+	"hash/crc32"
 	"math/rand"
 	"testing"
 	"time"
@@ -59,24 +60,23 @@ func (this *PingMsgProc) Init(proto *Protocol) {
 func (this *PingMsgProc) ReceiveMsg(msg *Msg, access byte) error {
 	log.Debug(
 		"[%v->%v]: %v",
-		msg.Con.RemoteAddr(),
-		msg.Con.LocalAddr(),
+		msg.Connection().RemoteAddr(),
+		msg.Connection().LocalAddr(),
 		string(msg.GetPayload()),
 	)
 
 	// send a pong message back to client
-	return pongMsgProc.SendMsg(msg.Con.Id(), pongTxt)
+	return pongMsgProc.SendMsg(msg.Connection().Id(), pongTxt)
 
 	return nil
 }
 func (this *PingMsgProc) SendMsg(targetId uint32, data interface{}) error {
 	txt := data.(string)
-	msg := Msg {
-		Data:   []byte(txt),
-		Header: this.Signature(),
-	}
+	msg := NewMsg()
+	msg.SetMsgType(this.Signature())
+	msg.SetPayload([]byte(txt))
 
-	err := this.parent.sendMsg(targetId, &msg)
+	err := this.parent.sendMsg(targetId, msg)
 	return err
 }
 func (this *PingMsgProc) Signature() uint16 {
@@ -95,20 +95,20 @@ func (this *PongMsgProc) Init(proto *Protocol) {
 func (this *PongMsgProc) ReceiveMsg(msg *Msg, access byte) error {
 	log.Debug(
 		"[%v->%v]: %v",
-		msg.Con.RemoteAddr(),
-		msg.Con.LocalAddr(),
+		msg.Connection().RemoteAddr(),
+		msg.Connection().LocalAddr(),
 		string(msg.GetPayload()),
 	)
+
 	return nil
 }
 func (this *PongMsgProc) SendMsg(targetId uint32, data interface{}) error {
 	txt := data.(string)
-	msg := Msg {
-		Data:   []byte(txt),
-		Header: this.Signature(),
-	}
+	msg := NewMsg()
+	msg.SetMsgType(this.Signature())
+	msg.SetPayload([]byte(txt))
 
-	err := this.parent.sendMsg(targetId, &msg)
+	err := this.parent.sendMsg(targetId, msg)
 	return err
 }
 func (this *PongMsgProc) Signature() uint16 {
@@ -143,15 +143,12 @@ func TestTCPSrv(t *testing.T) {
 	runSimpleTcpTest(1,   1,    t)
 	runSimpleTcpTest(1,   10,   t)
 	runSimpleTcpTest(1,   100,  t)
-	runSimpleTcpTest(1,   1000, t)
 	runSimpleTcpTest(10,  1,    t)
 	runSimpleTcpTest(10,  10,   t)
 	runSimpleTcpTest(10,  100,  t)
-	runSimpleTcpTest(10,  1000, t)
 	runSimpleTcpTest(100, 1,    t)
 	runSimpleTcpTest(100, 10,   t)
 	runSimpleTcpTest(100, 100,  t)
-	runSimpleTcpTest(100, 1000, t)
 
 	// shut everything down gracefully
 	proto.Shutdown()
@@ -228,19 +225,21 @@ func runClient(cli *TCPCli, sendCount int, doneChan chan bool, t *testing.T) {
 
 // testHeaders is a generalized function for testing all of the get and set
 // header routines.
-func testHeaders(i uint16, t *testing.T) {
-	log.Info("Testing headers with type %v", i)
+func testHeaders(msgSig uint16, t *testing.T) {
+	log.Info("Testing headers with type %v", msgSig)
 
 	text    := "This is a test message"
-	buffer  := make([]byte, len(text) + HEADER_LEN_B)
-	msgType := uint16(i)
-	header  := msgType
+	msgSize := uint16(len(text))
+	buffer  := make([]byte, msgSize + HEADER_LEN_B)
+	header  := uint64(0)
+
+	SetMsgSig(&header, msgSig)
 
 	// flags should be 0, test
-	if GetMsgCompressedFlag(msgType) {
+	if GetMsgCompressedFlag(header) {
 		t.Fatal("Compressed flag is set in new header")
 	}
-	if GetMsgEncryptedFlag(msgType) {
+	if GetMsgEncryptedFlag(header) {
 		t.Fatal("Encrypted flag is set in new header")
 	}
 
@@ -258,18 +257,24 @@ func testHeaders(i uint16, t *testing.T) {
 	// round trip and test header, payload, and flags
 	SetMsgHeader(header, buffer)
 	SetMsgPayload([]byte(text), buffer)
-	rtPayload := string(GetMsgPayload(buffer))
-	rtHeader  := GetMsgHeader(buffer)
-	rtMsgType := GetMsgSig(rtHeader)
+	rtPayload  := string(GetMsgPayload(buffer))
+	rtHeader   := GetMsgHeader(buffer)
+	rtMsgSig   := GetMsgSig(rtHeader)
+	rtMsgSize  := GetMsgSize(rtHeader)
+	rtChecksum := GetMsgChecksum(rtHeader)
+	rtDataHash := crc32.ChecksumIEEE(GetMsgPayload(buffer))
 
 	if !ValidateMsgHeader(buffer) {
 		t.Fatalf("Buffer failed header validation", buffer)
 	}
-	if rtHeader != header {
-		t.Fatalf("Roundtrip header: %v != %v\n", rtHeader, header)
+	if rtMsgSig != msgSig {
+		t.Fatalf("Roundtrip msgSig: %v != %v\n", rtMsgSig, msgSig)
 	}
-	if rtMsgType != msgType {
-		t.Fatalf("Roundtrip msgType: %v != %v\n", rtMsgType, msgType)
+	if rtMsgSize != msgSize {
+		t.Fatalf("Roundtrip msgSize: %v != %v\n", rtMsgSize, msgSize)
+	}
+	if rtChecksum != rtDataHash {
+		t.Fatalf("Checksum mismatch : %v != %v\n", rtChecksum, rtDataHash)
 	}
 	if !str.StrEq(rtPayload, text) {
 		t.Fatalf("Roundtrip payload: %v != %v\n", rtPayload, text)
@@ -279,13 +284,13 @@ func testHeaders(i uint16, t *testing.T) {
 	SetMsgEncryptedFlag(&header, false)
 	SetMsgCompressedFlag(&header, false)
 
-	if GetMsgCompressedFlag(msgType) {
+	if GetMsgCompressedFlag(header) {
 		t.Fatal("Compressed flag is set in new header")
 	}
-	if GetMsgEncryptedFlag(msgType) {
+	if GetMsgEncryptedFlag(header) {
 		t.Fatal("Encrypted flag is set in new header")
 	}
 
-	log.Info("TestHeaderOps[%v]: passed", i)
+	log.Info("TestHeaderOps[%v]: passed", msgSig)
 }
 
