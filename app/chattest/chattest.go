@@ -2,7 +2,7 @@
 //
 //  chattest.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -34,11 +34,10 @@ import (
 // Amount of time to wait before transmitting the next test msg.
 const TEST_DELAY_MS = 100
 
-
 // ChatTest implements ChatCliNotifier to send a canned set of chat
 // messages and verify they are received properly.
 type ChatTest struct {
-	currentChan uint32 
+	currentChan uint32
 	errors      int32
 	exeTime     time.Duration
 	parent      *chat.ChatCli
@@ -52,12 +51,12 @@ type ChatTest struct {
 // NewChatTest initializes a new ChatTest object and returns a pointer
 // to it for use.
 func NewChatTest(index int) *ChatTest {
-	test := ChatTest {
-		currentChan : 0,
-		errors      : 0,
-		success     : 0,
-		testCount   : 0,
-		testMap     : make(map[uint32]bool, 0),
+	test := ChatTest{
+		currentChan: 0,
+		errors:      0,
+		success:     0,
+		testCount:   0,
+		testMap:     make(map[uint32]bool, 0),
 	}
 
 	rand.Seed(int64(index))
@@ -66,7 +65,7 @@ func NewChatTest(index int) *ChatTest {
 }
 
 // OnMsg distributes chat messages to the appropriate handler.
-func (this *ChatTest) OnMsg(msg *chat.Msg){
+func (this *ChatTest) OnMsg(msg *chat.Msg) {
 	switch msg.Subtype {
 	case chat.MSG_SUB_CHAT:
 		this.checkChatMsg(msg)
@@ -112,10 +111,10 @@ func (this *ChatTest) OnShutdown() {
 }
 
 // GetResults returns the success and error counts, as well as the total
-// execution time of the test. 
+// execution time of the test.
 func (this *ChatTest) GetResults() (int, int, time.Duration) {
 	success := int(atomic.LoadInt32(&this.success))
-	errors  := int(atomic.LoadInt32(&this.errors))
+	errors := int(atomic.LoadInt32(&this.errors))
 
 	return success, errors, this.exeTime
 }
@@ -162,8 +161,8 @@ func (this *ChatTest) checkChatMsg(msg *chat.Msg) {
 			// from me, but not represented correctly
 			this.addError()
 			log.Error(
-				"Invalid message received from server " +
-				"(from: %s, len: %d, hash: %d, text: %s)",
+				"Invalid message received from server "+
+					"(from: %s, len: %d, hash: %d, text: %s)",
 				msg.From,
 				len(msg.Text),
 				rcvHash,
@@ -181,7 +180,7 @@ func (this *ChatTest) checkChatMsg(msg *chat.Msg) {
 		this.testMutex.Unlock()
 
 		log.Info(
-			"Msg validated (len: %d, hash: %d)", 
+			"Msg validated (len: %d, hash: %d)",
 			len(msg.Text),
 			rcvHash,
 		)
@@ -207,7 +206,7 @@ func (this *ChatTest) endTest() {
 	this.exeTime = time.Since(this.startTime)
 
 	// give the server some time to respond to the last messages
-	<-time.After(3 * time.Second)
+	<-time.After(10 * time.Second)
 
 	this.OnShutdown()
 }
@@ -217,8 +216,8 @@ func (this *ChatTest) endTest() {
 // hash.
 func (this *ChatTest) generateMsg() (string, uint32) {
 	// string length between 8 and 1024 chars
-	buffer := make([]byte, rand.Intn(1016) + 8)
-	
+	buffer := make([]byte, rand.Intn(1016)+8)
+
 	for i := 0; i < len(buffer); i++ {
 		buffer[i] = byte(rand.Intn(94) + 32)
 	}
@@ -239,9 +238,9 @@ func (this *ChatTest) nextTest() {
 	msg, hash := this.generateMsg()
 
 	log.Info(
-		"Test %d (len: %d, hash: %d)", 
-		this.testCount, 
-		len(msg), 
+		"Test %d (len: %d, hash: %d)",
+		this.testCount,
+		len(msg),
 		hash,
 	)
 
@@ -249,13 +248,13 @@ func (this *ChatTest) nextTest() {
 }
 
 // onConnectMsg is called when the connect confirmation is received from
-// the server. In this case, the client sends a message to join the 
+// the server. In this case, the client sends a message to join the
 // public channel.
 func (this *ChatTest) onConnectMsg(msg *chat.Msg) {
 	this.parent.SendJoinChannel(chat.PUB_CHANNEL)
 }
 
-// onJoinChannelMsg is called when the join channel confirmation is 
+// onJoinChannelMsg is called when the join channel confirmation is
 // received from the server and starts the first test.
 func (this *ChatTest) onJoinChannelMsg(msg *chat.Msg) {
 	log.Info("Joined channel %d", msg.ChannelId)
