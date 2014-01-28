@@ -53,6 +53,21 @@ func IntArrayToList(items []int, sep string) string {
 	return buffer.String()
 }
 
+// Int64ArrayToList takes an array of int64s and transforms them into a 
+// single string, delimited by a specified separator.
+func Int64ArrayToList(items []int64, sep string) string {
+	var buffer bytes.Buffer
+
+	for i, v := range items {
+		buffer.WriteString(strings.TrimSpace(strconv.FormatInt(v, 10)))
+		if i < len(items) - 1 {
+			buffer.WriteString(sep)
+		}
+	}
+
+	return buffer.String()
+}
+
 // StrArrayToCsv is a helper function that calls StrArrayToList 
 // using ", " as a separator.
 func StrArrayToCsv(items []string) string {

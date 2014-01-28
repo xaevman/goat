@@ -61,7 +61,7 @@ type Protocol struct {
 	objMutex   sync.RWMutex
 	security   AccessProvider
 	sigMap     map[uint16]MsgProcessor
-	perfs      *perf.PerfCounters
+	perfs      *perf.Counters
 }
 
 // NewProtocol is a helper constructor function which creates a newly initialized
@@ -72,7 +72,7 @@ func NewProtocol(pName string) *Protocol {
 		cliMap: make(map[uint32]Connection, 0),
 		name:   pName,
 		sigMap: make(map[uint16]MsgProcessor, 0),
-		perfs:  perf.NewPerfCounters(MODULE_PROTOCOL_NAME, PERF_COUNT, perfNames),
+		perfs:  perf.NewCounters(MODULE_PROTOCOL_NAME, PERF_COUNT, perfNames),
 	}
 
 	registerProtocol(&newProto)

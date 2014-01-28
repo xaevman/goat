@@ -10,6 +10,7 @@
 //
 //  -----------
 
+// Package math includes helper objects for common math functions.
 package math
 
 // Stdlib imports.

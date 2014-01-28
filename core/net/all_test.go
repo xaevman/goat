@@ -186,7 +186,7 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 
 	<-time.After(1 * time.Second)
 
-	perfTotal := proto.perfs.Get(PERF_SEND_TOTAL)
+	perfTotal := proto.perfs.Get(PERF_SEND_TOTAL).Value()
 
 	log.Info(
 		"%v clients, (%v, %v) messages in %v (%.2f msg/sec)",

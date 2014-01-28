@@ -17,6 +17,8 @@ package goapp
 import (
 	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/lib/lifecycle"
+	"github.com/xaevman/goat/lib/perf"
+	"github.com/xaevman/goat/lib/time"
 )
 
 // Stdlib imports.
@@ -25,11 +27,47 @@ import (
 	"sync"
 )
 
+// Built in performance timers.
+const (
+	APP_TIMER_PRE_INIT_MS = iota
+	APP_TIMER_POST_INIT_MS
+	APP_TIMER_PRE_SHUTDOWN_MS
+	APP_TIMER_POST_SHUTDOWN_MS
+	APP_TIMER_RUNTIME
+	APP_TIMER_PRE_LOOP_MS
+	APP_TIMER_POST_LOOP_MS
+	APP_TIMER_ON_HEARTBEAT_MS
+	APP_TIMER_LOOP_IDLE_MS
+	APP_MSGPUMP_COUNT
+	APP_PERF_COUNT
+)
+
+// Built in performance timer names.
+var appTimerNames = []string {
+	"AppTimerPreInitMs",
+	"AppTimerPostInitMs",
+	"AppTimerPreShutdownMs",
+	"AppTimerPostShutdownMs",
+	"AppTimerRuntime",
+	"AppTimerPreLoopMs",
+	"AppTimerPostLoopMs",
+	"AppTimerOnHeartbeatMs",
+	"AppTimerLoopIdleMs",
+	"AppManualMsgPumps",
+}
+
 // Application properties.
 var (
 	appName     string
+	appPerfs    = perf.NewCounters(
+		"GoApp", 
+		APP_PERF_COUNT, 
+		appTimerNames,
+	)
 	exitCode    = 0
 	initialized = false
+	runTimer    = new(time.Stopwatch)
+	stopwatch   = new(time.Stopwatch)
 )
 
 // Synchronization helpers.
@@ -80,12 +118,6 @@ type LoopHandler interface {
 	OnHeartbeat()
 	PreLoop()
 	PostLoop()
-}
-
-// Initialized returns a bool value denoting whether the application has
-// been successfully initialized or not.
-func Initialized() bool {
-	return initialized
 }
 
 // MsgPump manually pulses the main application loop.
@@ -150,15 +182,18 @@ func SetLoopHandler(obj LoopHandler) {
 
 // Start sets the GoApp's name and starts its execution.
 func Start(name string, callback chan bool) {
+	runTimer.Start()
+
 	stopChan = callback
 	go startApp(name)
 }
 
 // Stop begins the shutdown process of the application.
 func Stop() {
+	appPerfs.Next(APP_TIMER_RUNTIME, int64(runTimer.MarkSec()))
+
 	go func() {
 		syncObj.Shutdown()
-		stopChan<- true
 	}()
 }
 
@@ -197,23 +232,42 @@ func startApp(name string) {
 
 	appName = name
 
+	stopwatch.Restart()
 	appStarter.PreInit()
-	internalInit()
-	appStarter.PostInit()
+	appPerfs.Next(APP_TIMER_PRE_INIT_MS, stopwatch.MarkMs())
 
-	initialized = true
+	internalInit()
+
+	stopwatch.Restart()
+	appStarter.PostInit()
+	appPerfs.Next(APP_TIMER_POST_INIT_MS, stopwatch.MarkMs())
+
+	stopwatch.Reset()
 
 	for syncObj.QueryRun() {
+		stopwatch.Restart()
 		loopHandler.PreLoop()
+		appPerfs.Next(APP_TIMER_PRE_LOOP_MS, stopwatch.MarkMs())
 
 		select {
 		case <-msgPump:
+			appPerfs.Next(APP_TIMER_LOOP_IDLE_MS, stopwatch.MarkMs())
+			appPerfs.Increment(APP_MSGPUMP_COUNT)
 		case <-syncObj.QueryHeartbeat():
+			appPerfs.Next(APP_TIMER_LOOP_IDLE_MS, stopwatch.MarkMs())
+			
+			stopwatch.Restart()
 			loopHandler.OnHeartbeat()
+			appPerfs.Next(APP_TIMER_ON_HEARTBEAT_MS, stopwatch.MarkMs())
 		case <-syncObj.QueryShutdown():
+			appPerfs.Next(APP_TIMER_LOOP_IDLE_MS, stopwatch.MarkMs())
 		}
 
+		stopwatch.Restart()
 		loopHandler.PostLoop()
+		appPerfs.Next(APP_TIMER_POST_LOOP_MS, stopwatch.MarkMs())
+
+		stopwatch.Restart()
 	}
 }
 
@@ -221,12 +275,17 @@ func startApp(name string) {
 // internal shutdown code, and then lets the lifecycle syncObj know that shutdown
 // is complete.
 func internalStop() {
-	initialized = false
 	syncObj.StopHeart()
 
+	stopwatch.Restart()
 	appCloser.PreShutdown()
+	appPerfs.Next(APP_TIMER_PRE_SHUTDOWN_MS, stopwatch.MarkMs())
+
 	internalShutdown()
+
+	stopwatch.Restart()
 	appCloser.PostShutdown()
+	appPerfs.Next(APP_TIMER_POST_SHUTDOWN_MS, stopwatch.MarkMs())
 
 	syncObj.ShutdownComplete()
 

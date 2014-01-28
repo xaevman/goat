@@ -18,20 +18,20 @@ import (
 	"sync"
 )
 
-// PerfCounters registry and synchronization objects
+// Counters registry and synchronization objects
 var (
 	mutex   sync.RWMutex
-	perfMap = make(map[string]*PerfCounters, 0)
+	perfMap = make(map[string]*Counters, 0)
 )
 
-// GetAllPerfs returns a slice with pointers to all registered PerfCounters
+// GetAllPerfs returns a slice with pointers to all registered Counters
 // objects.
-func GetAllPerfs() []*PerfCounters {
+func GetAllPerfs() []*Counters {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
 	cursor      := 0
-	counterList := make([]*PerfCounters, len(perfMap))
+	counterList := make([]*Counters, len(perfMap))
 
 	for k, _ := range perfMap {
 		counterList[cursor] = perfMap[k]
@@ -41,25 +41,25 @@ func GetAllPerfs() []*PerfCounters {
 	return counterList
 }
 
-// GetPerfs returns the named PerfCounters object, if one is registered
+// GetPerfs returns the named Counters object, if one is registered
 // by that name. Otherwise, nil is returned.
-func GetPerfs(name string) *PerfCounters {
+func GetPerfs(name string) *Counters {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
 	return perfMap[name]
 }
 
-// registerPerfs adds a new PerfCounters object to the registry, overwriting
+// registerPerfs adds a new Counters object to the registry, overwriting
 // any previous objects that were registered with that name.
-func registerPerfs(perfs *PerfCounters) {
+func registerPerfs(perfs *Counters) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
 	perfMap[perfs.name] = perfs
 }
 
-// unregisterPerfs removes the named PerfCounters object from the registry.
+// unregisterPerfs removes the named Counters object from the registry.
 func unregisterPerfs(name string) {
 	mutex.Lock()
 	defer mutex.Unlock()
