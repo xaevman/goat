@@ -24,16 +24,17 @@ func AsString(err interface{}) string {
 	data := New(err)
 
 	return fmt.Sprintf(
-		"\n==== [Begin Crash Report] ====\n"+
-			"Error:    %v\n"+
-			"Hostname: %v\n"+
-			"CPUCount: %v\n"+
-			"CGOCalls: %v\n"+
-			"GOOS:     %v\n"+
-			"GOARCH:   %v\n\n"+
-			"%v"+
-			"%v"+
-			"%v"+
+		"\n==== [Begin Crash Report] ====\n" +
+			"Error:    %v\n"   +
+			"Hostname: %v\n"   +
+			"CPUCount: %v\n"   +
+			"CGOCalls: %v\n"   +
+			"GOOS:     %v\n"   +
+			"GOARCH:   %v\n\n" +
+			"%s" +
+			"%s" +
+			"%s" +
+			"%s" +
 			"==== [End Crash Report] ====",
 		data.System.Error,
 		data.System.Hostname,
@@ -42,6 +43,7 @@ func AsString(err interface{}) string {
 		data.System.OS,
 		data.System.Arch,
 		fmtEnvStr(data),
+		fmtPerfStr(data),
 		fmtStackTraceStr(data),
 		fmtMemStatsStr(data),
 	)
@@ -149,6 +151,18 @@ func fmtMemStatsStr(data *DiagData) string {
 	}
 
 	buffer.WriteString("==== [End Malloc Stats] ====\n\n")
+
+	return buffer.String()
+}
+
+// fmtPerfStr prints the perf snapshot along with appropriate header and 
+// footer for parsing.
+func fmtPerfStr(data *DiagData) string {
+	var buffer bytes.Buffer
+
+	buffer.WriteString("==== [Begin Perf Snapshot] ====\n")
+	buffer.WriteString(data.Perfs.String())
+	buffer.WriteString("==== [End Perf Snapshot] ====\n\n")
 
 	return buffer.String()
 }

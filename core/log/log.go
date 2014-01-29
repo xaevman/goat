@@ -13,15 +13,65 @@
 // Package log implements a standard, multi-channel logging interface.
 package log
 
+// External imports.
+import (
+    "github.com/xaevman/goat/lib/lifecycle"
+    "github.com/xaevman/goat/lib/perf"
+    "github.com/xaevman/goat/lib/time"
+)
+
+// Stdlib imports.
 import (
     "fmt"
-    "github.com/xaevman/goat/lib/lifecycle"
     "os"
     "runtime"
     "sync"
-    "time"
+    stdtime "time"
     "path/filepath"
 )
+
+// Perf counters.
+const (
+    PERF_LOG_BUFFERS= iota
+    PERF_LOG_CRASH
+    PERF_LOG_DEBUG
+    PERF_LOG_ERROR
+    PERF_LOG_INFO
+    PERF_LOG_INIT
+    PERF_LOG_SUBSCRIBER_REG
+    PERF_LOG_SUBSCRIBER_UNREG
+    PERF_LOG_TIMER_CRASH
+    PERF_LOG_TIMER_DEBUG
+    PERF_LOG_TIMER_ERROR
+    PERF_LOG_TIMER_IDLE
+    PERF_LOG_TIMER_INFO
+    PERF_LOG_COUNT
+)
+
+// Perf counters.
+var (
+    logPerfNames = []string {
+        "Buffers",
+        "Crash",
+        "Debug",
+        "Error",
+        "Info",
+        "Init",
+        "SubscriberRegistered",
+        "SubscriberUnregistered",
+        "TimerCrashMs",
+        "TimerDebugMs",
+        "TimerErrorMs",
+        "TimerIdleMs",
+        "TimerInfoMs",
+    }
+    logPerfs     = perf.NewCounterSet(
+        "Service.Log",
+        PERF_LOG_COUNT,
+        logPerfNames,
+    )
+)
+
 
 // Log write buffers
 var (
@@ -44,13 +94,6 @@ var (
     syncObj     *lifecycle.Lifecycle
 )
 
-// Message counters
-var (
-    crashCount int
-    debugCount int
-    errorCount int
-    infoCount  int
-)
 
 // LogSubscriber defines the interface that should be implemented by 
 // log subscribers.
@@ -62,6 +105,7 @@ type LogSubscriber interface {
     Name() string
     Shutdown()
 }
+
 
 // Crash formats and logs a message to the crash buffer.
 func Crash(format string, v ...interface{}) {
@@ -104,21 +148,6 @@ func Error(format string, v ...interface{}) {
     error <- msg
 }
 
-// GetLogCounts returns a copy of the current log statistics.
-func GetLogCounts() LogCounts {
-    mutex.Lock()
-    defer mutex.Unlock()
-
-    stats := LogCounts{
-        Crash: crashCount,
-        Debug: debugCount,
-        Error: errorCount,
-        Info:  infoCount,
-    }
-
-    return stats
-}
-
 // Info formats and logs a message to the info buffer.
 func Info(format string, v ...interface{}) {
     msg := getLogMsg(format, "INFO", v...)
@@ -142,16 +171,19 @@ func Init(bufferSize int) {
     debug       = make(chan string, bufferSize)
     error       = make(chan string, bufferSize)
     info        = make(chan string, bufferSize)
-
-    crashCount  = 0
-    debugCount  = 0
-    errorCount  = 0
-    infoCount   = 0
-
     initialized = true
     syncObj     = lifecycle.New()
 
     mutex.Unlock()
+
+    logPerfs.Set(PERF_LOG_BUFFERS, int64(bufferSize))
+    logPerfs.Increment(PERF_LOG_INIT)
+
+    logPerfs.EnableStats(PERF_LOG_TIMER_CRASH)
+    logPerfs.EnableStats(PERF_LOG_TIMER_DEBUG)
+    logPerfs.EnableStats(PERF_LOG_TIMER_ERROR)
+    logPerfs.EnableStats(PERF_LOG_TIMER_IDLE)
+    logPerfs.EnableStats(PERF_LOG_TIMER_INFO)
 
     go async()
 }
@@ -162,6 +194,8 @@ func RegisterLogSubscriber(sub LogSubscriber) {
     defer mutex.Unlock()
 
     subscribers[sub.Name()] = sub
+
+    logPerfs.Increment(PERF_LOG_SUBSCRIBER_REG)
     Info("LogSubscriber %v registered", sub.Name())
 }
 
@@ -183,6 +217,7 @@ func UnregisterLogSubscriber(sub LogSubscriber) {
     defer mutex.Unlock()
 
     delete(subscribers, sub.Name())
+    logPerfs.Increment(PERF_LOG_SUBSCRIBER_UNREG)
     Info("LogSubscriber %v unregistered", sub.Name())
 }
 
@@ -190,18 +225,39 @@ func UnregisterLogSubscriber(sub LogSubscriber) {
 // to registered subscribers. When signaled, async drains all logs and clears
 // the list of registered subcribers for a clean shutdown.
 func async() {
+    stopwatch := new(time.Stopwatch)
+
     for syncObj.QueryRun() {
         select {
         case msg := <- crash:
+            logPerfs.Set(PERF_LOG_TIMER_IDLE, stopwatch.MarkMs())
+
+            stopwatch.Restart()
             sendCrash(msg)
+            logPerfs.Set(PERF_LOG_TIMER_CRASH, stopwatch.MarkMs())
         case msg := <- debug:
+            logPerfs.Set(PERF_LOG_TIMER_IDLE, stopwatch.MarkMs())
+
+            stopwatch.Restart()
             sendDebug(msg)
+            logPerfs.Set(PERF_LOG_TIMER_DEBUG, stopwatch.MarkMs())
         case msg := <- error:
+            logPerfs.Set(PERF_LOG_TIMER_IDLE, stopwatch.MarkMs())
+
+            stopwatch.Restart()
             sendError(msg)
+            logPerfs.Set(PERF_LOG_TIMER_ERROR, stopwatch.MarkMs())
         case msg := <- info:
+            logPerfs.Set(PERF_LOG_TIMER_IDLE, stopwatch.MarkMs())
+
+            stopwatch.Restart()
             sendInfo(msg)
+            logPerfs.Set(PERF_LOG_TIMER_INFO, stopwatch.MarkMs())
         case <-syncObj.QueryShutdown():
+            logPerfs.Set(PERF_LOG_TIMER_IDLE, stopwatch.MarkMs())
         }
+
+        stopwatch.Restart()
     }
 
     Info("Shutdown initiated")
@@ -255,7 +311,7 @@ func getLogMsg(format string, log string, v ...interface{}) string {
     if ok {
         newFmt = fmt.Sprintf(
             "%v [%v] <%v:%v> %v",
-            time.Now().Format(time.RFC3339),
+            stdtime.Now().Format(stdtime.RFC3339),
             log,
             filepath.Base(file),
             line,
@@ -264,7 +320,7 @@ func getLogMsg(format string, log string, v ...interface{}) string {
     } else {
         newFmt = fmt.Sprintf(
             "%v [%v] %v",
-            time.Now().Format(time.RFC3339),
+            stdtime.Now().Format(stdtime.RFC3339),
             log,
             format,
         )
@@ -279,11 +335,11 @@ func sendCrash(msg string) {
     mutex.Lock()
     defer mutex.Unlock()
 
-    crashCount++
-
     for _, v := range subscribers {
         v.Crash(msg)
     }
+
+    logPerfs.Increment(PERF_LOG_CRASH)
 }
 
 // sendDebug distributes a debug log to all subscribers and increments
@@ -292,11 +348,11 @@ func sendDebug(msg string) {
     mutex.Lock()
     defer mutex.Unlock()
 
-    debugCount++
-
     for _, v := range subscribers {
         v.Debug(msg)
     }
+
+    logPerfs.Increment(PERF_LOG_DEBUG)
 }
 
 // sendError distributes an error log to all subscribers and increments
@@ -305,11 +361,11 @@ func sendError(msg string) {
     mutex.Lock()
     defer mutex.Unlock()
 
-    errorCount++
-
     for _, v := range subscribers {
         v.Error(msg)
     }
+
+    logPerfs.Increment(PERF_LOG_ERROR)
 }
 
 // sendInfo distributes an error log to all subscribers and increments
@@ -318,18 +374,9 @@ func sendInfo(msg string) {
     mutex.Lock()
     defer mutex.Unlock()
 
-    infoCount++
-
     for _, v := range subscribers {
         v.Info(msg)
     }
-}
 
-// LogCounts encapsulates a snapshot of the number of messages
-// logged to each log type so far.
-type LogCounts struct {
-    Crash int
-    Debug int
-    Error int
-    Info  int
+    logPerfs.Increment(PERF_LOG_INFO)
 }

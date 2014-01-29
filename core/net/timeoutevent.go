@@ -17,8 +17,8 @@ const (
 	TIMEOUT_CONNECT = iota
 	TIMEOUT_DISCONNECT
 	TIMEOUT_GENERAL
-	TIMEOUT_SEND
 	TIMEOUT_RCV
+	TIMEOUT_SEND
 )
 
 // TimeoutEvent represents a network operation and associated data which has

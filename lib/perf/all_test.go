@@ -13,7 +13,6 @@
 package perf
 
 import (
-	"github.com/xaevman/goat/lib/math"
 	"github.com/xaevman/goat/lib/str"
 )
 
@@ -21,8 +20,10 @@ import (
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"testing"
+	"time"
 )
 
 // Perf definitions for this module.
@@ -39,13 +40,13 @@ const (
 
 // Friendly names for PERF_TEST counters.
 var perfNames = []string{
-	"TestCounter1",
-	"TestCounter2",
-	"TestCounter3",
-	"TestCounter4",
-	"TestCounter5",
-	"TestCounter6",
-	"TestCounter7",
+	"Counter1",
+	"Counter2",
+	"Counter3",
+	"Counter4",
+	"Counter5",
+	"Counter6",
+	"Counter7",
 }
 
 // Stat test helper object.
@@ -94,24 +95,24 @@ var statResults = []statResult {
 
 // TestPerfs test variables
 var (
-	goCount   int = 1000
-	testCount int = 1000
+	goCount     int = 1000
+	testCount   int = 1000
 )
 
 // TestPerfs makes sure a perfs object can be saved and then retrieved from the perf system.
 func TestPerfStore(t *testing.T) {
 	// create object
-	perfs := NewCounters(
+	perfs := NewCounterSet(
 		"test",
 		PERF_TEST_COUNT,
 		perfNames,
 	)
 
 	// make sure we can grab it back out of the perfs service
-	p2 := GetPerfs(perfs.name)
+	p2 := GetCounterSet(perfs.name)
 
 	if perfs != p2 {
-		t.Fatalf("GetPerfs returned a different object! (%+v)\n", p2)
+		t.Fatalf("GetCounterSet returned a different object! (%+v)\n", p2)
 	}
 
 	log.Println("TestPerfStore: passed")
@@ -121,7 +122,7 @@ func TestPerfStore(t *testing.T) {
 // the number of iterations that were performed during the test.
 func TestPerfCounts(t *testing.T) {
 	// create object
-	perfs := NewCounters(
+	perfs := NewCounterSet(
 		"test",
 		PERF_TEST_COUNT,
 		perfNames,
@@ -165,6 +166,33 @@ func TestPerfCounts(t *testing.T) {
 	log.Println("TestPerfCounts: passed")
 }
 
+// TestPerSec performs a couple of statically timed tests to check perSec 
+// rate calculations.
+func TestPerSec(t *testing.T) {
+	// create object
+	perfs := NewCounterSet(
+		"test",
+		PERF_TEST_COUNT,
+		perfNames,
+	)
+
+	perfs.Increment(PERF_TEST_COUNTER1)
+
+	<-time.After(1 * time.Second)
+	perfs.Add(PERF_TEST_COUNTER1, 100)
+
+	// should be ~ 100/sec
+	x  := perfs.Get(PERF_TEST_COUNTER1).PerSec()
+	xr := round(x, 0)
+	if xr != 100 {
+		t.Fatalf("TsetPerSec after 1 sec should be ~100 (%.2f)", x)
+	}
+
+	log.Printf("1sec: ~100sec (x: %.2f, xr: %.2f)", x, xr)
+
+	log.Println("TestPerSec: passed")
+}
+
 // TestStats runs 120 values through a Stat object and checks the resulting
 // statistics against a known-correct answer set after every 10 new values.
 // Note that if STAT_SAMPLES is chaged the answer set also needs to be 
@@ -174,14 +202,14 @@ func TestStats(t *testing.T) {
 
 	var counter, resCounter int
 
-	s := new(Stat)
+	s := NewStat()
 
 	for i := 0; i < len(statSeries); i++ {
 		s.Next(statSeries[i])
 
 		counter++
 		if counter > 9 {
-			min := math.IClamp(i + 1 - STAT_SAMPLES, 0, len(statSeries))
+			min := clamp(i + 1 - STAT_SAMPLES, 0, len(statSeries))
 			fmt.Println()
 			fmt.Printf(
 				"\n========\nset %v :: %v\n",
@@ -193,48 +221,30 @@ func TestStats(t *testing.T) {
 
 			ex := statResults[resCounter]
 
-			if s.min != ex.min {
-				t.Fatalf(
-					"Min[%v] expected %v, result %v",
-					i,
-					ex.min, 
-					s.min,
-				)
-			}
-
-			if s.max != ex.max {
-				t.Fatalf(
-					"Max[%v] expected %v, result %v",
-					i,
-					ex.max,
-					s.max,
-				)
-			}
-
-			if math.Round(s.mean, 2) != math.Round(ex.mean, 2) {
+			if round(s.Mean(), 2) != round(ex.mean, 2) {
 				t.Fatalf(
 					"Mean[%v] expected %v, result %v",
 					i,
 					ex.mean,
-					s.mean,
+					s.Mean(),
 				)
 			}
 
-			if math.Round(s.variance, 2) != math.Round(ex.variance, 2) {
+			if round(s.Variance(), 2) != round(ex.variance, 2) {
 				t.Fatalf(
 					"Variance[%v] expected %v, result %v",
 					i,
 					ex.variance,
-					s.variance,
+					s.Variance(),
 				)
 			}
 
-			if math.Round(s.stdDev, 2) != math.Round(ex.stdDev, 2) {
+			if round(s.StdDev(), 2) != round(ex.stdDev, 2) {
 				t.Fatalf(
 					"StdDev[%v] expected %v, result %v",
 					i,
 					ex.stdDev,
-					s.stdDev,
+					s.StdDev(),
 				)
 			}
 
@@ -246,6 +256,23 @@ func TestStats(t *testing.T) {
 	}
 
 	fmt.Println()
+
+	fmt.Println("*** Perf snapshot ***")
+	fmt.Println(TakeSnapshot())
+}
+
+// clamp clamps a given int value to be between the supplied
+// min and max (both inclusive).
+func clamp(val int, min int, max int) int {
+	if val < min {
+		return min
+	}
+
+	if val > max {
+		return max
+	}
+
+	return val
 }
 
 // printStats prints a summary of the contents of a Stat object.
@@ -253,17 +280,30 @@ func printStats(index int, s *Stat) {
 	fmt.Printf(
 		"\nIndex:    %v\n" +
 		"Len:      %v\n" +
-		"Min:      %v\n" +
-		"Max:      %v\n" +
 		"Mean:     %v\n" +
 		"Variance: %v\n" +
 		"StdDev:   %v\n",
 		index,
 		s.Len(),
-		s.Min(),
-		s.Max(),
 		s.Mean(),
 		s.Variance(),
 		s.StdDev(),
 	)
+}
+
+// Round rounds numbers to the specified precision.
+func round(x float64, prec int) float64 {
+	pow := math.Pow(10, float64(prec))
+	
+	x = x * pow
+
+	if x < 0.0 {
+		x -= 0.5
+	} else {
+		x += 0.5
+	}
+
+	x = float64(int64(x))
+
+	return x / float64(pow)
 }

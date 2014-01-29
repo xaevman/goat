@@ -15,6 +15,7 @@
 package diag
 
 import (
+	"github.com/xaevman/goat/lib/perf"
 	"github.com/xaevman/goat/lib/str"
 )
 
@@ -28,10 +29,12 @@ import (
 // Buffer size, in bytes, for storing stack traces.
 const TRACE_BUFFER_LEN_B = 1 * 1024 * 1024
 
+
 // DiagData represents all aggregated diagnostic information.
 type DiagData struct {
 	System         *SysData
 	Environment    *EnvData
+	Perfs          *perf.Snapshot
 	CallStack      string
 	FullStackTrace string
 	Memory         *runtime.MemStats
@@ -97,6 +100,9 @@ func New(err interface{}) *DiagData {
 	}
 
 	data.System = &sys
+
+	// perf
+	data.Perfs = perf.TakeSnapshot()
 
 	return data
 }

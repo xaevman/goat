@@ -22,9 +22,9 @@ import (
 	"time"
 )
 
-// EventChan implements the DisconnectHandler interface and exposes a
-// channel based way of receiving disconnected NetIDs from underlying TCPSrv
-// and TCPCli instances.
+
+// EventChan implements the EventHandler interface and exposes a
+// channel based way of receiving events from underlying net objects.
 type EventChan struct {
 	conChan     chan Connection
 	discoChan   chan Connection
@@ -36,9 +36,9 @@ type EventChan struct {
 // the net service, and returns a pointer to it for direct use.
 func NewEventChan() *EventChan {
 	ec := EventChan{
-		conChan:     make(chan Connection, 0),
-		discoChan:   make(chan Connection, 0),
-		timeoutChan: make(chan *TimeoutEvent, 0),
+		conChan     : make(chan Connection, 0),
+		discoChan   : make(chan Connection, 0),
+		timeoutChan : make(chan *TimeoutEvent, 0),
 	}
 
 	SetEventHandler(&ec)
@@ -50,7 +50,7 @@ func NewEventChan() *EventChan {
 // This should not be used directly by user code. Instead you should
 // insert QueryConnect() into your channel based IO logic, where
 // you'll receive signals containing the Connection objects representing
-// sockets which ahve just connected.
+// sockets which have just connected.
 func (this *EventChan) OnConnect(con Connection) {
 	select {
 	case this.conChan <- con:

@@ -27,7 +27,8 @@ import (
 )
 
 // TCP Buffer size for reading data off the line.
-const TCP_BUFFER_SIZE_B = 512 // KB * B
+const TCP_BUFFER_SIZE_B = 1 * 1024 // 1KB
+
 
 // TCPCli represents a TCP client object. The client object handles connecting
 // to server processes and manages basic IO and synchronization tasks, accepting

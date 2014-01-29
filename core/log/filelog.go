@@ -12,12 +12,43 @@
 
 package log
 
+// External imports.
 import (
     "github.com/xaevman/goat/lib/fs"
     "github.com/xaevman/goat/lib/lifecycle"
+    "github.com/xaevman/goat/lib/perf"
+    "github.com/xaevman/goat/lib/time"
+)
+
+// Stdlib imports.
+import (
     "os"
     "path/filepath"
+    stdtime "time"
 )
+
+// Perf counters.
+const (
+    PERF_FLOG_CRASH_BYTES = iota
+    PERF_FLOG_DEBUG_BYTES
+    PERF_FLOG_ERROR_BYTES
+    PERF_FLOG_INFO_BYTES
+    PERF_FLOG_FLUSH
+    PERF_FLOG_TIMER_FLUSH
+    PERF_FLOG_TIMER_IDLE
+    PERF_FLOG_COUNT
+)
+
+// Perf counter friendly names.
+var perfNames = []string {
+    "CrashLogSizeBytes",
+    "DebugLogSizeBytes",
+    "ErrorLogSizeBytes",
+    "InfoLogSizeBytes",
+    "ManualFlush",
+    "TimerFlushhMs",
+    "TimerIdleMs",
+}
 
 // Default config options
 const (
@@ -37,6 +68,7 @@ const (
 // FileLog module name
 const FL_MOD_NAME = "FileLog"
 
+
 // InitFileLog creates a new FileLog instance, initializes its members,
 // registers it with the log service, and spawns a goroutine which is
 // responsible for periodically flushing logs to disk.
@@ -44,12 +76,17 @@ func InitFileLog() {
     fileLog := FileLog {
         FlushIntervalMs: DEFAULT_FLUSH_INTERVAL_MS,
 
-        crash:   make(chan string, DEFAULT_BUFFER_DEPTH),
-        debug:   make(chan string, DEFAULT_BUFFER_DEPTH),
-        error:   make(chan string, DEFAULT_BUFFER_DEPTH),
-        flush:   make(chan bool,   1),
-        info:    make(chan string, DEFAULT_BUFFER_DEPTH),
-        syncObj: lifecycle.New(),
+        crash   : make(chan string, DEFAULT_BUFFER_DEPTH),
+        debug   : make(chan string, DEFAULT_BUFFER_DEPTH),
+        error   : make(chan string, DEFAULT_BUFFER_DEPTH),
+        flush   : make(chan bool,   1),
+        info    : make(chan string, DEFAULT_BUFFER_DEPTH),
+        perfs   : perf.NewCounterSet(
+            "Service.Log.FileLog",
+            PERF_FLOG_COUNT,
+            perfNames,
+        ),
+        syncObj : lifecycle.New(),
     }
 
     RegisterLogSubscriber(&fileLog)
@@ -77,6 +114,7 @@ type FileLog struct {
     flush     chan bool
     info      chan string
     infoFile  *os.File
+    perfs     *perf.CounterSet
     syncObj   *lifecycle.Lifecycle
 }
 
@@ -136,18 +174,51 @@ func (this *FileLog) flushLogs() {
     }
 }
 
+// getFileStats is fired by a timer once per minute and updates the FileLog's
+// perf counters with information about log file sizes.
+func (this *FileLog) getFileStats() {
+    this.perfs.Set(
+        PERF_FLOG_CRASH_BYTES, 
+        fs.GetFileSize(filepath.Join(DEFAULT_LOG_DIR, CRASH_LOG_NAME)),
+    )
+
+    this.perfs.Set(
+        PERF_FLOG_DEBUG_BYTES, 
+        fs.GetFileSize(filepath.Join(DEFAULT_LOG_DIR, DEBUG_LOG_NAME)),
+    )
+
+    this.perfs.Set(
+        PERF_FLOG_ERROR_BYTES,
+        fs.GetFileSize(filepath.Join(DEFAULT_LOG_DIR, ERROR_LOG_NAME)),
+    )
+
+    this.perfs.Set(
+        PERF_FLOG_INFO_BYTES,
+        fs.GetFileSize(filepath.Join(DEFAULT_LOG_DIR, INFO_LOG_NAME)),
+    )
+
+    stdtime.AfterFunc(1 * stdtime.Minute, this.getFileStats)
+}
+
 // init runs in a separate goroutine. It ensures that the log directory is
 // created, opens the log files for write access, and then responds to timed
 // and manual flush requests to write buffered data through to those files. 
 // Once signaled for shutdown, init flushes all remaining logs, closes the files
 // and signals its completion.
 func (this *FileLog) init() {
+    stopwatch := new(time.Stopwatch)
+
+    this.perfs.EnableStats(PERF_FLOG_TIMER_FLUSH)
+    this.perfs.EnableStats(PERF_FLOG_TIMER_IDLE)
+
     fs.Mkdir(DEFAULT_LOG_DIR, 0755)
 
     this.crashFile = this.initLog(CRASH_LOG_NAME)
     this.debugFile = this.initLog(DEBUG_LOG_NAME)
     this.errorFile = this.initLog(ERROR_LOG_NAME)
     this.infoFile  = this.initLog(INFO_LOG_NAME)
+
+    stdtime.AfterFunc(1 * stdtime.Minute, this.getFileStats)
 
     this.syncObj.StartHeart(this.FlushIntervalMs)
 
@@ -156,13 +227,24 @@ func (this *FileLog) init() {
         select {
         // manual flush
         case <-this.flush:
+            this.perfs.Set(PERF_FLOG_TIMER_IDLE, stopwatch.MarkMs())
+
+            stopwatch.Restart()
             this.flushLogs()
+            this.perfs.Set(PERF_FLOG_TIMER_FLUSH, stopwatch.MarkMs())
         // timed flush
         case <-this.syncObj.QueryHeartbeat():
+            this.perfs.Set(PERF_FLOG_TIMER_IDLE, stopwatch.MarkMs())
+
+            stopwatch.Restart()
             this.flushLogs()
+            this.perfs.Set(PERF_FLOG_TIMER_FLUSH, stopwatch.MarkMs())
         // shutdown
         case <-this.syncObj.QueryShutdown():
+            this.perfs.Set(PERF_FLOG_TIMER_IDLE, stopwatch.MarkMs())
         }
+
+        stopwatch.Restart()
     }
 
     // shutdown

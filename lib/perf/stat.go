@@ -23,11 +23,11 @@ import (
 // in a given Stat object.
 const STAT_SAMPLES = 100
 
+
 // Stat represents a series of values and some common statistical values
 // associated with that set.
 type Stat struct {
 	cursor    int
-	lastVal   int64
 	max       int64
 	maxCursor int
 	mean      float64
@@ -39,13 +39,12 @@ type Stat struct {
 	variance  float64
 }
 
-// Increment calculates and inserts a new NextVal() which is 1 greater
-// than the last value.
-func (this *Stat) Increment() {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
+// NewStat initializes a new Stat object and returns a pointer to it for use.
+func NewStat() *Stat {
+	newStat := new(Stat)
+	newStat.Reset()
 
-	this.nextVal(this.lastVal + 1)
+	return newStat
 }
 
 // MaxCount returns the total number of items in the set.
@@ -56,14 +55,11 @@ func (this *Stat) Len() int {
 	return this.maxCursor
 }
 
-// Max returns the largest of all values in the set.
+// Max returns the maximum value that has been observed since recording
+// stats for this object.
 func (this *Stat) Max() int64 {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
-
-	if this.stale {
-		this.recalc()
-	}
 
 	return this.max
 }
@@ -80,20 +76,20 @@ func (this *Stat) Mean() float64 {
 	return this.mean
 }
 
-// Min returns the smallest of all values in the set.
+// Min returns the minimum value that has been observed since reocrding
+// stats for this object.
 func (this *Stat) Min() int64 {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
-
-	if this.stale {
-		this.recalc()
-	}
 
 	return this.min
 }
 
 // Next submits the given value as the next value in the set.
 func (this *Stat) Next(val int64) {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
 	this.nextVal(val)
 }
 
@@ -103,11 +99,10 @@ func (this *Stat) Reset() {
 	defer this.mutex.Unlock()
 
 	this.cursor    = 0
-	this.lastVal   = 0
 	this.max       = 0
 	this.maxCursor = 0
 	this.mean      = 0
-	this.min       = 0
+	this.min       = math.MaxInt64
 	this.stale     = false
 	this.stdDev    = 0
 	this.variance  = 0
@@ -127,18 +122,16 @@ func (this *Stat) StdDev() float64 {
 
 // String implements Stringer to pretty-print the Stat object.
 func (this *Stat) String() string {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
-	
-	return fmt.Sprintf("%d", this.lastVal)
-}
-
-// Value returns the most recent value submitted to the Stat object.
-func (this *Stat) Value() int64 {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
-
-	return this.lastVal
+	return fmt.Sprintf(
+		"min: %d, max: %d, mean: %.2f, " +
+		"variance: %.2f, stdDev: %.2f, samples: %d",
+		this.Min(),
+		this.Max(),
+		this.Mean(),
+		this.Variance(),
+		this.StdDev(),
+		this.Len(),
+	)
 }
 
 // Variance returns the variance across all values in the set.
@@ -156,9 +149,16 @@ func (this *Stat) Variance() float64 {
 // nextVal adds a new value to the next slot in the set. Older values
 // are overwritten in the order that they were added.
 func (this *Stat) nextVal(val int64) {
-	this.lastVal           = val
 	this.vals[this.cursor] = val	
 	this.stale             = true
+
+	if val < this.min {
+		this.min = val
+	}
+
+	if val > this.max {
+		this.max = val
+	}
 
 	if this.cursor < len(this.vals) - 1 {
 		this.cursor++
@@ -178,14 +178,6 @@ func (this *Stat) recalc() {
 
 	for i := 0; i < this.maxCursor; i++ {
 		total += this.vals[i]
-
-		if this.vals[i] > this.max {
-			this.max = this.vals[i]
-		}
-
-		if this.vals[i] < this.min {
-			this.min = this.vals[i]
-		}
 	}
 
 	this.mean = float64(total) / float64(this.maxCursor)

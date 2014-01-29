@@ -16,6 +16,9 @@ package main
 import (
 	"github.com/xaevman/goat/core/config"
 	"github.com/xaevman/goat/core/goapp"
+	"github.com/xaevman/goat/core/log"
+	"github.com/xaevman/goat/core/net"
+	"github.com/xaevman/goat/lib/perf"
 	"github.com/xaevman/goat/proto/chat"
 )
 
@@ -38,9 +41,29 @@ func (this *ChatSrvStart) PostInit() {
 	this.srv.Start()
 }
 
+type ChatSrvLoop struct {}
+func (this *ChatSrvLoop) OnHeartbeat() {
+	netCounters := perf.GetCounterSet("Service.Net")
+	msgRoute    := netCounters.Get(net.PERF_NET_MSG_ROUTE)
+
+	chatCounters := perf.GetCounterSet("Service.Net.Proto.Chat")
+	rcvRate      := chatCounters.Get(net.PERF_PROTO_RCV_OK)
+	sendRate     := chatCounters.Get(net.PERF_PROTO_SEND_OK)
+
+	log.Info("Route/Sec: %.2f", msgRoute.PerSec())
+	log.Info("Rx/Sec: %.2f", rcvRate.PerSec())
+	log.Info("Tx/Sec: %.2f", sendRate.PerSec())
+}
+func (this *ChatSrvLoop) PreLoop() {}
+func (this *ChatSrvLoop) PostLoop() {}
+
+
 // main is the application entry point.
 func main() {
 	goapp.SetAppStarter(new(ChatSrvStart))
+	goapp.SetLoopHandler(new(ChatSrvLoop))
+
+	goapp.SetHeartbeat(5000) // 5000ms / 5sec
 
 	stopChan := make(chan bool, 0)
 	go goapp.Start("ChatSrv", stopChan)

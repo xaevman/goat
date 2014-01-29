@@ -55,6 +55,17 @@ func FileExists(path string) (bool, os.FileInfo) {
 	return true, fileInfo
 }
 
+// GetFileSize stats a file on disk and returns its length. If no file exists
+// then zero is returned.
+func GetFileSize(path string) int64 {
+	exist, info := FileExists(path)
+	if !exist {
+		return 0
+	}
+
+	return info.Size()
+}
+
 // OpenFile creates or opens the specified path with the read-only
 // flag and DEFAULT_PERM permissions.
 func OpenFile(path string) (*os.File, error) {

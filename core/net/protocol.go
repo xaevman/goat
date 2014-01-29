@@ -26,26 +26,51 @@ import (
 	"sync"
 )
 
-// Protocol module name.
-const MODULE_PROTOCOL_NAME = "Protocol"
-
 // Perf counters.
 const (
-	PERF_SEND_COUNT = iota
-	PERF_SEND_TOTAL
-	PERF_RCV_COUNT
-	PERF_RCV_TOTAL
-	PERF_MSG_TOTAL
-	PERF_COUNT
+	PERF_PROTO_CONNECT = iota
+	PERF_PROTO_DISCONNECT
+	PERF_PROTO_ERR_AUTH_CLIENT
+	PERF_PROTO_ERR_NO_ACCESS
+	PERF_PROTO_ERR_RCV_CHECKSUM
+	PERF_PROTO_ERR_RCV_CON_NIL
+	PERF_PROTO_ERR_RCV_DECRYPT
+	PERF_PROTO_ERR_RCV_DECOMPRESS
+	PERF_PROTO_ERR_RCV_PROCESS
+	PERF_PROTO_ERR_SEND_COMPRESS
+	PERF_PROTO_ERR_SEND_ENCRYPT
+	PERF_PROTO_ERR_SEND_INVALID_CLI
+	PERF_PROTO_ERR_SEND_INVALID_MSG_TYPE
+	PERF_PROTO_RCV_BYTES
+	PERF_PROTO_RCV_OK
+	PERF_PROTO_RCV_TOTAL
+	PERF_PROTO_SEND_BYTES
+	PERF_PROTO_SEND_OK
+	PERF_PROTO_SEND_TOTAL
+	PERF_PROTO_COUNT
 )
 
 // Perf counter friendly names.
-var perfNames = []string{
-	"SendCount",
-	"SendTotal",
-	"ReceiveCount",
+var protoPerfNames = []string {
+	"Connect",
+	"Disconnect",
+	"ErrorAuthClient",
+	"ErrorNoAccess",
+	"ErrorReceiveChecksum",
+	"ErrorReceiveConNil",
+	"ErrorReceiveDecrypt",
+	"ErrorReceiveDecompress",
+	"ErrorReceiveProcess",
+	"ErrorSendCompress",
+	"ErrorSendEncrypt",
+	"ErrorSendInvalidCli",
+	"ErrorSendInvalidMsgType",
+	"ReceiveBytes",
+	"ReceiveSuccess",
 	"ReceiveTotal",
-	"MsgTotal",
+	"SendBytes",
+	"SendSuccess",
+	"SendTotal",
 }
 
 // Protocol represents a collection of related clients, message type
@@ -61,7 +86,7 @@ type Protocol struct {
 	objMutex   sync.RWMutex
 	security   AccessProvider
 	sigMap     map[uint16]MsgProcessor
-	perfs      *perf.Counters
+	perfs      *perf.CounterSet
 }
 
 // NewProtocol is a helper constructor function which creates a newly initialized
@@ -72,7 +97,11 @@ func NewProtocol(pName string) *Protocol {
 		cliMap: make(map[uint32]Connection, 0),
 		name:   pName,
 		sigMap: make(map[uint16]MsgProcessor, 0),
-		perfs:  perf.NewCounters(MODULE_PROTOCOL_NAME, PERF_COUNT, perfNames),
+		perfs:  perf.NewCounterSet(
+			perfName(pName), 
+			PERF_PROTO_COUNT, 
+			protoPerfNames,
+		),
 	}
 
 	registerProtocol(&newProto)
@@ -250,6 +279,7 @@ func (this *Protocol) getAccess(con Connection) byte {
 
 	access, err := this.security.Authorize(con)
 	if err != nil {
+		this.perfs.Increment(PERF_PROTO_ERR_AUTH_CLIENT)
 		log.Debug("Error authorizing client %v (%v)", con.Id(), err)
 		go con.Close()
 		return 0
@@ -265,10 +295,13 @@ func (this *Protocol) onConnect(con Connection) {
 
 	access := this.getAccess(con)
 	if access < 1 {
+		this.perfs.Increment(PERF_PROTO_ERR_NO_ACCESS)
 		return
 	}
 
 	this.cliMap[con.Id()] = con
+
+	this.perfs.Increment(PERF_PROTO_CONNECT)
 
 	log.Debug("Connection %v registered for Proto %v", con.Id(), this.name)
 }
@@ -284,7 +317,15 @@ func (this *Protocol) onDisconnect(con Connection) {
 
 	delete(this.cliMap, con.Id())
 
+	this.perfs.Increment(PERF_PROTO_DISCONNECT)
+
 	log.Debug("Connection %v unregistered from Proto %v", con.Id(), this.name)
+}
+
+// perfName returns the name to be used for registering with the perf provider,
+// given the supplied base name.
+func perfName(baseName string) string {
+	return fmt.Sprintf("Service.Net.Proto.%s", baseName)
 }
 
 // rcvMsg is the message pipeline for incoming messages. First, the protocol
@@ -294,22 +335,24 @@ func (this *Protocol) onDisconnect(con Connection) {
 // processes if registered and necessary. Finally, the pre-processed message is
 // passed to the message processor for final processing.
 func (this *Protocol) rcvMsg(msg *Msg) {
-	defer this.perfs.Increment(PERF_RCV_TOTAL)
-	defer this.perfs.Increment(PERF_MSG_TOTAL)
+	defer this.perfs.Increment(PERF_PROTO_RCV_TOTAL)
 
 	if !msg.isValid() {
+		this.perfs.Increment(PERF_PROTO_ERR_RCV_CHECKSUM)
 		log.Error("Malformed message received (checksum mismatch")
 		return
 	}
 
 	msgCon := msg.Connection()
 	if msgCon == nil {
+		this.perfs.Increment(PERF_PROTO_ERR_RCV_CON_NIL)
 		log.Error("Malformed message received (Connection nil)")
 		return
 	}
 
 	access := this.getAccess(msgCon)
 	if access < 1 {
+		this.perfs.Increment(PERF_PROTO_ERR_NO_ACCESS)
 		return
 	}
 
@@ -342,6 +385,7 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 
 		err := this.crypto.Decrypt(msg)
 		if err != nil {
+			this.perfs.Increment(PERF_PROTO_ERR_RCV_DECRYPT)
 			log.Error(
 				"Error decrypting message (proto: %s, err: %v)",
 				this.name,
@@ -363,6 +407,7 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 
 		err := this.compressor.Decompress(msg)
 		if err != nil {
+			this.perfs.Increment(PERF_PROTO_ERR_RCV_DECOMPRESS)
 			log.Error(
 				"Error decompressing message (proto: %s, err: %v)",
 				this.name,
@@ -372,8 +417,10 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 		}
 	}
 
-	err := proc.ReceiveMsg(msg, access)
+	dataLen := int64(msg.Len())
+	err     := proc.ReceiveMsg(msg, access)
 	if err != nil {
+		this.perfs.Increment(PERF_PROTO_ERR_RCV_PROCESS)
 		log.Error(
 			"Error processing message (proto: %s, err: %v)",
 			this.name,
@@ -381,20 +428,21 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 		)
 	}
 
-	this.perfs.Increment(PERF_RCV_COUNT)
+	this.perfs.Increment(PERF_PROTO_RCV_OK)
+	this.perfs.Add(PERF_PROTO_RCV_BYTES, dataLen)
 }
 
 // sendMsg distributes the given msg to a registerd client with that id,
 // if one exists.
 func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
-	defer this.perfs.Increment(PERF_SEND_TOTAL)
-	defer this.perfs.Increment(PERF_MSG_TOTAL)
+	defer this.perfs.Increment(PERF_PROTO_SEND_TOTAL)
 
 	this.cliMutex.RLock()
 	cli := this.cliMap[id]
 	this.cliMutex.RUnlock()
 
 	if cli == nil {
+		this.perfs.Increment(PERF_PROTO_ERR_SEND_INVALID_CLI)
 		return errors.New(fmt.Sprintf(
 			"sendMsg failed: Client %v doesn't exist.",
 			id,
@@ -408,6 +456,7 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 	sig       := GetMsgSig(msgHeader)
 
 	if this.sigMap[sig] == nil {
+		this.perfs.Increment(PERF_PROTO_ERR_SEND_INVALID_MSG_TYPE)
 		return errors.New(fmt.Sprintf(
 			"Can't send a message for an unregistered message type "+
 				"signature (%v)",
@@ -425,6 +474,7 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 
 		err := this.compressor.Compress(msg)
 		if err != nil {
+			this.perfs.Increment(PERF_PROTO_ERR_SEND_COMPRESS)
 			return errors.New(fmt.Sprintf(
 				"Error compressing data: %v", err,
 			))
@@ -440,6 +490,7 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 
 		err := this.crypto.Encrypt(msg)
 		if err != nil {
+			this.perfs.Increment(PERF_PROTO_ERR_SEND_ENCRYPT)
 			return errors.New(fmt.Sprintf(
 				"Error encrypting data: %v", err,
 			))
@@ -452,9 +503,13 @@ func (this *Protocol) sendMsg(id uint32, msg *Msg) error {
 		MAX_SEND_TIMEOUT_SEC,
 
 	)
+
+	dataLen := int64(msg.Len())
+
 	cli.Send(msg.GetBytes(), timeoutSec)
 
-	this.perfs.Increment(PERF_SEND_COUNT)
+	this.perfs.Increment(PERF_PROTO_SEND_OK)
+	this.perfs.Add(PERF_PROTO_SEND_BYTES, dataLen)
 
 	return nil
 }

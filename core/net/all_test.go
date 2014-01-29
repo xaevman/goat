@@ -14,6 +14,7 @@ package net
 
 import (
 	"github.com/xaevman/goat/core/log"
+	"github.com/xaevman/goat/lib/perf"
 	"github.com/xaevman/goat/lib/str"
 )
 
@@ -126,6 +127,8 @@ func TestHeaderOps(t *testing.T) {
 func TestTCPSrv(t *testing.T) {
 	log.Info("")
 
+	//log.DebugLogs = true
+
 	// set up the protocol
 	proto.AddSignature(pingMsgProc)
 	proto.AddSignature(pongMsgProc)
@@ -150,8 +153,11 @@ func TestTCPSrv(t *testing.T) {
 	srv.Stop()
 }
 
+// runSimpleTcpTest spawns the given number of clients and asks them to send the
+// supplied number of messages, checking to make sure that the perf totals incrememnt
+// properly and do not indicate any failures.
 func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
-	log.Info("SimpleTcpTest (%v clients, %v msg/cli", cliCount, sendCount)
+	log.Info("SimpleTcpTest (%v clients, %v msg/cli)", cliCount, sendCount)
 
 	proto.perfs.Reset()
 
@@ -186,7 +192,7 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 
 	<-time.After(1 * time.Second)
 
-	perfTotal := proto.perfs.Get(PERF_SEND_TOTAL).Value()
+	perfTotal := proto.perfs.Get(PERF_PROTO_SEND_TOTAL).Value()
 
 	log.Info(
 		"%v clients, (%v, %v) messages in %v (%.2f msg/sec)",
@@ -197,7 +203,7 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 		float64(perfTotal)/runTime.Seconds(),
 	)
 
-	log.Info(proto.perfs.String())
+	log.Info(perf.DumpString())
 }
 
 // runClient connects to the test TCPSrv instance and sends lots of

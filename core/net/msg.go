@@ -70,6 +70,12 @@ func (this *Msg) GetPayload() []byte {
 	return this.data
 }
 
+// Len returns the overall size of the data contained within the
+// Msg object, including header and payload.
+func (this *Msg) Len() int {
+	return HEADER_LEN_B + len(this.data)
+}
+
 // SetConnection sets the connection associated with this msg.
 func (this *Msg) SetConnection(parentCon Connection) {
 	this.con = parentCon

@@ -32,6 +32,7 @@ package net
 // External imports.
 import (
 	"github.com/xaevman/goat/core/log"
+	"github.com/xaevman/goat/lib/perf"
 )
 
 // Stdlib imports.
@@ -39,6 +40,48 @@ import (
 	"hash/crc32"
 	"net"
 	"sync"
+)
+
+// Perf counters.
+const (
+	PERF_NET_CONNECT = iota
+	PERF_NET_DISCONNECT
+	PERF_NET_MSG_ROUTE
+	PERF_NET_MSG_ROUTE_INVALID
+	PERF_NET_PROTO_REGISTER
+	PERF_NET_PROTO_UNREGISTER
+	PERF_NET_SIG_REGISTER
+	PERF_NET_SIG_UNREGISTER
+	PERF_NET_TIMEOUT_CONNECT
+	PERF_NET_TIMEOUT_DISCONNECT
+	PERF_NET_TIMEOUT_GENERAL
+	PERF_NET_TIMEOUT_RCV
+	PERF_NET_TIMEOUT_SEND
+	PERF_NET_COUNT
+)
+
+// Perf counters.
+var (
+	netPerfNames = []string {
+		"Connect",
+		"Disconnect",
+		"MessageRouted",
+		"MessageRouteInvalid",
+		"ProtocolRegistered",
+		"ProtocolUnregistered",
+		"SignatureRegistered",
+		"SignatureUnregistered",
+		"TimeoutConnect",
+		"TimeoutDisconnect",
+		"TimeoutGeneral",
+		"TimeoutReceive",
+		"TimeoutSend",
+	}
+	netPerfs     = perf.NewCounterSet(
+		"Service.Net",
+		PERF_NET_COUNT,
+		netPerfNames,
+	)
 )
 
 // Timeouts.
@@ -147,7 +190,7 @@ type MsgProcessor interface {
 	Signature() uint16
 }
 
-// EventHandler returns the net service's registered EventHandler.
+// GetEventHandler returns the net service's registered EventHandler.
 func GetEventHandler() EventHandler {
 	eventMutex.RLock()
 	defer eventMutex.RUnlock()
@@ -317,6 +360,8 @@ func ValidateMsgHeader(msgData []byte) bool {
 // onConnect is called by appropriate, connection-based client and server
 // objects to notify Protocols of clients coming into, and exiting, the system.
 func onConnect(con Connection) {
+	netPerfs.Increment(PERF_NET_CONNECT)
+
 	addr, _, _ := net.SplitHostPort(con.RemoteAddr().String())
 
 	log.Debug(
@@ -345,6 +390,8 @@ func onConnect(con Connection) {
 // onDisconnect is called by appropriate, connection-based client and server
 // objects to notify Protocols of clients coming into, and exiting, the system.
 func onDisconnect(con Connection) {
+	netPerfs.Increment(PERF_NET_DISCONNECT)
+
 	addr, _, _ := net.SplitHostPort(con.RemoteAddr().String())
 
 	log.Debug(
@@ -378,6 +425,19 @@ func onTimeout(
 	parentId uint32,
 	data interface{},
 ) {
+	switch timeoutType {
+	case TIMEOUT_CONNECT:
+		netPerfs.Increment(PERF_NET_TIMEOUT_CONNECT)
+	case TIMEOUT_DISCONNECT:
+		netPerfs.Increment(PERF_NET_TIMEOUT_DISCONNECT)
+	case TIMEOUT_GENERAL:
+		netPerfs.Increment(PERF_NET_TIMEOUT_GENERAL)
+	case TIMEOUT_RCV:
+		netPerfs.Increment(PERF_NET_TIMEOUT_RCV)
+	case TIMEOUT_SEND:
+		netPerfs.Increment(PERF_NET_TIMEOUT_SEND)
+	}
+
 	eventMutex.RLock()
 	defer eventMutex.RUnlock()
 
@@ -404,11 +464,14 @@ func routeMsg(msg *Msg) {
 	proto := sigMap[sig]
 	if proto == nil {
 		routeMutex.RUnlock()
+		netPerfs.Increment(PERF_NET_MSG_ROUTE_INVALID)
 		return
 	}
 	routeMutex.RUnlock()
 
 	proto.rcvMsg(msg)
+
+	netPerfs.Increment(PERF_NET_MSG_ROUTE)
 }
 
 // registerProtocol registers a new Protocol object with the net service.
@@ -426,6 +489,8 @@ func registerProtocol(proto *Protocol) {
 	}
 
 	protoMap[proto.name] = proto
+
+	netPerfs.Increment(PERF_NET_PROTO_REGISTER)
 
 	log.Info("Protocol %v registered", proto.name)
 }
@@ -470,6 +535,8 @@ func registerSignature(sig uint16, proto *Protocol) {
 
 	sigMap[sig] = proto
 
+	netPerfs.Increment(PERF_NET_SIG_REGISTER)
+
 	log.Info("Proto %v, Sig %v registered", proto.name, sig)
 }
 
@@ -481,12 +548,14 @@ func unregisterProtocol(proto *Protocol) {
 
 	if protoMap[proto.name] == proto {
 		delete(protoMap, proto.name)
+		netPerfs.Increment(PERF_NET_PROTO_UNREGISTER)
 		log.Info("Protocol %v unregistered", proto.name)
 	}
 
 	for k, v := range sigMap {
 		if v == proto {
 			delete(sigMap, k)
+			netPerfs.Increment(PERF_NET_SIG_UNREGISTER)
 			log.Info("Proto %v, Sig %v unregistered", proto.name, k)
 		}
 	}
@@ -500,6 +569,7 @@ func unregisterSignature(sig uint16, proto *Protocol) {
 
 	if sigMap[sig] == proto {
 		delete(sigMap, sig)
+		netPerfs.Increment(PERF_NET_SIG_UNREGISTER)
 		log.Info("Proto %v, Sig %v unregistered", proto.name, sig)
 	}
 }

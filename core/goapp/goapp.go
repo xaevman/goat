@@ -24,44 +24,45 @@ import (
 // Stdlib imports.
 import (
 	"os"
+	"os/signal"
 	"sync"
 )
 
 // Built in performance timers.
 const (
-	APP_TIMER_PRE_INIT_MS = iota
-	APP_TIMER_POST_INIT_MS
-	APP_TIMER_PRE_SHUTDOWN_MS
-	APP_TIMER_POST_SHUTDOWN_MS
-	APP_TIMER_RUNTIME
-	APP_TIMER_PRE_LOOP_MS
-	APP_TIMER_POST_LOOP_MS
-	APP_TIMER_ON_HEARTBEAT_MS
-	APP_TIMER_LOOP_IDLE_MS
-	APP_MSGPUMP_COUNT
-	APP_PERF_COUNT
+	PERF_APP_TIMER_PRE_INIT = iota
+	PERF_APP_TIMER_POST_INIT
+	PERF_APP_TIMER_PRE_SHUTDOWN
+	PERF_APP_TIMER_POST_SHUTDOWN
+	PERF_APP_TIMER_RUNTIME
+	PERF_APP_TIMER_PRE_LOOP
+	PERF_APP_TIMER_POST_LOOP
+	PERF_APP_TIMER_ON_HEARTBEAT
+	PERF_APP_TIMER_LOOP_IDLE
+	PERF_APP_MSGPUMP
+	PERF_APP_COUNT
 )
 
 // Built in performance timer names.
 var appTimerNames = []string {
-	"AppTimerPreInitMs",
-	"AppTimerPostInitMs",
-	"AppTimerPreShutdownMs",
-	"AppTimerPostShutdownMs",
-	"AppTimerRuntime",
-	"AppTimerPreLoopMs",
-	"AppTimerPostLoopMs",
-	"AppTimerOnHeartbeatMs",
-	"AppTimerLoopIdleMs",
-	"AppManualMsgPumps",
+	"TimerPreInitMs",
+	"TimerPostInitMs",
+	"TimerPreShutdownMs",
+	"TimerPostShutdownMs",
+	"TimerRuntime",
+	"TimerPreLoopMs",
+	"TimerPostLoopMs",
+	"TimerOnHeartbeatMs",
+	"TimerLoopIdleMs",
+	"ManualMsgPump",
 }
 
 // Application properties.
 var (
 	appName     string
-	appPerfs    = perf.NewCounters(
-		"GoApp", 
-		APP_PERF_COUNT, 
+	appPerfs    = perf.NewCounterSet(
+		"Service.GoApp", 
+		PERF_APP_COUNT, 
 		appTimerNames,
 	)
 	exitCode    = 0
@@ -190,7 +191,7 @@ func Start(name string, callback chan bool) {
 
 // Stop begins the shutdown process of the application.
 func Stop() {
-	appPerfs.Next(APP_TIMER_RUNTIME, int64(runTimer.MarkSec()))
+	appPerfs.Set(PERF_APP_TIMER_RUNTIME, int64(runTimer.MarkSec()))
 
 	go func() {
 		syncObj.Shutdown()
@@ -213,6 +214,24 @@ func handlePanic() {
 // internalInit, AppStarter.PostInit().
 func internalInit() {
 	log.Debug("App Init")
+
+	// enable stats on all relevant counters
+	appPerfs.EnableStats(PERF_APP_TIMER_LOOP_IDLE)
+	appPerfs.EnableStats(PERF_APP_TIMER_ON_HEARTBEAT)
+	appPerfs.EnableStats(PERF_APP_TIMER_POST_LOOP)
+	appPerfs.EnableStats(PERF_APP_TIMER_PRE_LOOP)
+
+	c := make(chan os.Signal, 0)
+	signal.Notify(c, os.Interrupt)
+	go func(){
+		for {
+		    select {
+		    case <-c:
+	    		Stop()
+		    	return
+	    	}
+    	}
+	}()
 }
 
 // internalShutdown performs clean-up logic that can't be overriden by
@@ -220,6 +239,7 @@ func internalInit() {
 // internalShutdown(), and then AppCloser.PostShutdown().
 func internalShutdown() {
 	log.Shutdown()
+	log.Debug("**** Perf snapshot ***\n%v", perf.TakeSnapshot())
 	log.Debug("App shutdown complete")
 }
 
@@ -234,38 +254,38 @@ func startApp(name string) {
 
 	stopwatch.Restart()
 	appStarter.PreInit()
-	appPerfs.Next(APP_TIMER_PRE_INIT_MS, stopwatch.MarkMs())
+	appPerfs.Set(PERF_APP_TIMER_PRE_INIT, stopwatch.MarkMs())
 
 	internalInit()
 
 	stopwatch.Restart()
 	appStarter.PostInit()
-	appPerfs.Next(APP_TIMER_POST_INIT_MS, stopwatch.MarkMs())
+	appPerfs.Set(PERF_APP_TIMER_POST_INIT, stopwatch.MarkMs())
 
 	stopwatch.Reset()
 
 	for syncObj.QueryRun() {
 		stopwatch.Restart()
 		loopHandler.PreLoop()
-		appPerfs.Next(APP_TIMER_PRE_LOOP_MS, stopwatch.MarkMs())
+		appPerfs.Set(PERF_APP_TIMER_PRE_LOOP, stopwatch.MarkMs())
 
 		select {
 		case <-msgPump:
-			appPerfs.Next(APP_TIMER_LOOP_IDLE_MS, stopwatch.MarkMs())
-			appPerfs.Increment(APP_MSGPUMP_COUNT)
+			appPerfs.Set(PERF_APP_TIMER_LOOP_IDLE, stopwatch.MarkMs())
+			appPerfs.Increment(PERF_APP_MSGPUMP)
 		case <-syncObj.QueryHeartbeat():
-			appPerfs.Next(APP_TIMER_LOOP_IDLE_MS, stopwatch.MarkMs())
+			appPerfs.Set(PERF_APP_TIMER_LOOP_IDLE, stopwatch.MarkMs())
 			
 			stopwatch.Restart()
 			loopHandler.OnHeartbeat()
-			appPerfs.Next(APP_TIMER_ON_HEARTBEAT_MS, stopwatch.MarkMs())
+			appPerfs.Set(PERF_APP_TIMER_ON_HEARTBEAT, stopwatch.MarkMs())
 		case <-syncObj.QueryShutdown():
-			appPerfs.Next(APP_TIMER_LOOP_IDLE_MS, stopwatch.MarkMs())
+			appPerfs.Set(PERF_APP_TIMER_LOOP_IDLE, stopwatch.MarkMs())
 		}
 
 		stopwatch.Restart()
 		loopHandler.PostLoop()
-		appPerfs.Next(APP_TIMER_POST_LOOP_MS, stopwatch.MarkMs())
+		appPerfs.Set(PERF_APP_TIMER_POST_LOOP, stopwatch.MarkMs())
 
 		stopwatch.Restart()
 	}
@@ -279,13 +299,13 @@ func internalStop() {
 
 	stopwatch.Restart()
 	appCloser.PreShutdown()
-	appPerfs.Next(APP_TIMER_PRE_SHUTDOWN_MS, stopwatch.MarkMs())
+	appPerfs.Set(PERF_APP_TIMER_PRE_SHUTDOWN, stopwatch.MarkMs())
 
 	internalShutdown()
 
 	stopwatch.Restart()
 	appCloser.PostShutdown()
-	appPerfs.Next(APP_TIMER_POST_SHUTDOWN_MS, stopwatch.MarkMs())
+	appPerfs.Set(PERF_APP_TIMER_POST_SHUTDOWN, stopwatch.MarkMs())
 
 	syncObj.ShutdownComplete()
 

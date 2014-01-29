@@ -15,23 +15,38 @@
 package perf
 
 import (
+	"bytes"
 	"sync"
 )
 
-// Counters registry and synchronization objects
+// CounterSet registry and synchronization objects
 var (
 	mutex   sync.RWMutex
-	perfMap = make(map[string]*Counters, 0)
+	perfMap = make(map[string]*CounterSet, 0)
 )
 
-// GetAllPerfs returns a slice with pointers to all registered Counters
+// DumpString dumps every value, of every Counter, of every CounterSet registered
+// with the perf service, in string format.
+func DumpString() string {
+	var buffer bytes.Buffer
+
+	counterSets := GetAllCounterSets()
+
+	for i := 0; i < len(counterSets); i++ {
+		buffer.WriteString(counterSets[i].String())
+	}
+
+	return buffer.String()
+}
+
+// GetAllCounterSets returns a slice with pointers to all registered CounterSet
 // objects.
-func GetAllPerfs() []*Counters {
+func GetAllCounterSets() []*CounterSet {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
 	cursor      := 0
-	counterList := make([]*Counters, len(perfMap))
+	counterList := make([]*CounterSet, len(perfMap))
 
 	for k, _ := range perfMap {
 		counterList[cursor] = perfMap[k]
@@ -41,26 +56,26 @@ func GetAllPerfs() []*Counters {
 	return counterList
 }
 
-// GetPerfs returns the named Counters object, if one is registered
+// GetCounterSet returns the named CounterSet object, if one is registered
 // by that name. Otherwise, nil is returned.
-func GetPerfs(name string) *Counters {
+func GetCounterSet(name string) *CounterSet {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
 	return perfMap[name]
 }
 
-// registerPerfs adds a new Counters object to the registry, overwriting
+// registerCounterSet adds a new CounterSet object to the registry, overwriting
 // any previous objects that were registered with that name.
-func registerPerfs(perfs *Counters) {
+func registerCounterSet(perfs *CounterSet) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
 	perfMap[perfs.name] = perfs
 }
 
-// unregisterPerfs removes the named Counters object from the registry.
-func unregisterPerfs(name string) {
+// unregisterCounterSet removes the named CounterSet object from the registry.
+func unregisterCounterSet(name string) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
