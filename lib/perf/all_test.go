@@ -176,19 +176,17 @@ func TestPerSec(t *testing.T) {
 		perfNames,
 	)
 
-	perfs.Increment(PERF_TEST_COUNTER1)
+	perfs.Add(PERF_TEST_COUNTER1, 100)
 
 	<-time.After(1 * time.Second)
-	perfs.Add(PERF_TEST_COUNTER1, 100)
 
 	// should be ~ 100/sec
 	x  := perfs.Get(PERF_TEST_COUNTER1).PerSec()
-	xr := round(x, 0)
-	if xr != 100 {
-		t.Fatalf("TsetPerSec after 1 sec should be ~100 (%.2f)", x)
+	if x != 100 {
+		t.Fatalf("TestPerSec after 1 sec should be ~100 (%d)", x)
 	}
 
-	log.Printf("1sec: ~100sec (x: %.2f, xr: %.2f)", x, xr)
+	log.Printf("1sec: ~100sec (x: %d)", x)
 
 	log.Println("TestPerSec: passed")
 }

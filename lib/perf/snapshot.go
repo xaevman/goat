@@ -64,7 +64,7 @@ type CounterVals struct {
 	Mean     float64
 	Min      int64
 	Name     string
-	PerSec   float64
+	PerSec   int64
 	StdDev   float64
 	Value    int64
 	Variance float64
@@ -73,7 +73,7 @@ type CounterVals struct {
 // String pretty-prints the values inside the CounterVals object.
 func (this *CounterVals) String() string {
 	return fmt.Sprintf(
-		"name: %s, val: %d, per sec: %.2f, min: %d, max: %d, " +
+		"name: %s, val: %d, per sec: %d, min: %d, max: %d, " +
 		"mean: %.2f, variance: %.2f, std dev: %.2f",
 		this.Name,
 		this.Value,

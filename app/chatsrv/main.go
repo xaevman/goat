@@ -22,6 +22,11 @@ import (
 	"github.com/xaevman/goat/proto/chat"
 )
 
+// Stdlib imports.
+import (
+	"fmt"
+)
+
 // Default config options.
 const (
 	DEFAULT_ADDR = "127.0.0.1:8900"
@@ -50,9 +55,14 @@ func (this *ChatSrvLoop) OnHeartbeat() {
 	rcvRate      := chatCounters.Get(net.PERF_PROTO_RCV_OK)
 	sendRate     := chatCounters.Get(net.PERF_PROTO_SEND_OK)
 
-	log.Info("Route/Sec: %.2f", msgRoute.PerSec())
-	log.Info("Rx/Sec: %.2f", rcvRate.PerSec())
-	log.Info("Tx/Sec: %.2f", sendRate.PerSec())
+	perfStr := fmt.Sprintf(
+		"route/sec: %d, rx/sec: %d, tx/sec: %d",
+		msgRoute.PerSec(),
+		rcvRate.PerSec(),
+		sendRate.PerSec(),
+	)
+
+	log.Info(perfStr)
 }
 func (this *ChatSrvLoop) PreLoop() {}
 func (this *ChatSrvLoop) PostLoop() {}
@@ -63,7 +73,7 @@ func main() {
 	goapp.SetAppStarter(new(ChatSrvStart))
 	goapp.SetLoopHandler(new(ChatSrvLoop))
 
-	goapp.SetHeartbeat(5000) // 5000ms / 5sec
+	goapp.SetHeartbeat(1000) // 1000ms / 1sec
 
 	stopChan := make(chan bool, 0)
 	go goapp.Start("ChatSrv", stopChan)

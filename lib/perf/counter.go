@@ -2,7 +2,7 @@
 //
 //  counter.go
 //
-//  Copyright (c) 2014, Jared Chavez. 
+//  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -19,17 +19,16 @@ import (
 	"time"
 )
 
-
 // Counter represents a simple performance counter object. Counters tracking
 // an ongoing value while also tracking the min, max and per-second delta
 // between samples. Addtionally, statistics can be enabled on a counter object
 // to enable tracking of variance, mean, median and standard deviation.
 type Counter struct {
-	mutex      sync.Mutex
-	perSec     float64
-	stats      *Stat
-	timestamps [2]time.Time
-	vals       [2]int64
+	mutex  sync.Mutex
+	perSec int64
+	stats  *Stat
+	total  int64
+	val    int64
 }
 
 // NewCounter initializes a new Counter object and returns a pointer to it
@@ -37,6 +36,8 @@ type Counter struct {
 func NewCounter() *Counter {
 	newCounter := new(Counter)
 	newCounter.Reset()
+
+	time.AfterFunc(1 * time.Second, newCounter.calcPerSec)
 
 	return newCounter
 }
@@ -47,16 +48,12 @@ func (this *Counter) Add(amount int64) {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	newVal := this.vals[0] + amount
-
-	this.vals[1]       = this.vals[0]
-	this.vals[0]       = newVal
-	this.timestamps[1] = this.timestamps[0]
-	this.timestamps[0] = time.Now()
+	this.val   += amount
+	this.total += amount
 
 	// update stats
 	if this.stats != nil {
-		this.stats.Next(newVal)
+		this.stats.Next(amount)
 	}
 }
 
@@ -86,11 +83,11 @@ func (this *Counter) Increment() {
 
 // PerSec calculates and returns the per-second derivative from the most recent
 // two samples.
-func (this *Counter) PerSec() float64 {
+func (this *Counter) PerSec() int64 {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	return this.calcPerSec()
+	return this.perSec
 }
 
 // Reset re-initializes the counter object and underlying stats. It does not disable
@@ -99,11 +96,9 @@ func (this *Counter) Reset() {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	this.perSec        = 0
-	this.timestamps[1] = time.Now()
-	this.timestamps[0] = this.timestamps[1]
-	this.vals[1]       = 0
-	this.vals[0]       = 0
+	this.perSec = 0
+	this.total  = 0
+	this.val    = 0
 
 	if this.stats != nil {
 		this.stats.Reset()
@@ -115,10 +110,8 @@ func (this *Counter) Set(val int64) {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	this.vals[1]       = this.vals[0]
-	this.vals[0]       = val
-	this.timestamps[1] = this.timestamps[0]
-	this.timestamps[0] = time.Now()
+	this.val    = val
+	this.total += val
 
 	// update stats
 	if this.stats != nil {
@@ -126,7 +119,7 @@ func (this *Counter) Set(val int64) {
 	}
 }
 
-// Stats returns this counter objects statistics object. If stats are
+// Stats returns this counter object's statistics object. If stats are
 // not enabled, returns nil.
 func (this *Counter) Stats() *Stat {
 	this.mutex.Lock()
@@ -140,10 +133,10 @@ func (this *Counter) String() string {
 	statTxt := ""
 
 	this.mutex.Lock()
- 	if this.stats != nil {
- 		statTxt = " " + this.stats.String()
- 	}
- 	this.mutex.Unlock()
+	if this.stats != nil {
+		statTxt = " " + this.stats.String()
+	}
+	this.mutex.Unlock()
 
 	return fmt.Sprintf(
 		"value: %d, perSec: %.2f%s",
@@ -158,13 +151,17 @@ func (this *Counter) Value() int64 {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	return this.vals[0]
+	return this.val
 }
 
-// calcPerSec calculates the rate of change, per-second, since the last value
-// arrived.
-func (this *Counter) calcPerSec() float64 {
-	return float64(this.vals[0] - this.vals[1]) / 
-		(this.timestamps[0].Sub(this.timestamps[1])).Seconds()
-}
+// calcPerSec stores the rate of per-second change over the last
+// 1 second interval.
+func (this *Counter) calcPerSec() {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
 
+	this.perSec = this.total
+	this.total  = 0
+
+	time.AfterFunc(1 * time.Second, this.calcPerSec)
+}
