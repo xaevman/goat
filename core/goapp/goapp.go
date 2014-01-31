@@ -60,11 +60,7 @@ var appTimerNames = []string {
 // Application properties.
 var (
 	appName     string
-	appPerfs    = perf.NewCounterSet(
-		"Module.GoApp", 
-		PERF_APP_COUNT, 
-		appTimerNames,
-	)
+	appPerfs    *perf.CounterSet
 	exitCode    = 0
 	initialized = false
 	runTimer    = new(time.Stopwatch)
@@ -184,6 +180,12 @@ func SetLoopHandler(obj LoopHandler) {
 // Start sets the GoApp's name and starts its execution.
 func Start(name string, callback chan bool) {
 	runTimer.Start()
+
+	appPerfs = perf.NewCounterSet(
+		"Module.GoApp." + name, 
+		PERF_APP_COUNT, 
+		appTimerNames,
+	)
 
 	stopChan = callback
 	go startApp(name)

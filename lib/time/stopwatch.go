@@ -17,26 +17,26 @@ package time
 // Stdlib imports.
 import (
 	"sync"
-	stdtime "time"
+	"time"
 )
 
 // Stopwatch presents a simple API for measuring the amount of time between
 // two events.
 type Stopwatch struct {
-	duration  stdtime.Duration
+	duration  time.Duration
 	mutex     sync.Mutex
 	running   bool
-	startTime stdtime.Time
+	startTime time.Time
 }
 
 // Mark returns the elapsed time.Duration without stopping the underlying
 // timer.
-func (this *Stopwatch) Mark() stdtime.Duration {
+func (this *Stopwatch) Mark() time.Duration {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
 	if this.running {
-		this.duration = stdtime.Since(this.startTime)
+		this.duration = time.Since(this.startTime)
 	}
 
 	return this.duration
@@ -45,13 +45,13 @@ func (this *Stopwatch) Mark() stdtime.Duration {
 // MarkMs returns the elapsed time in whole milliseconds without stopping
 // the underlying timer.
 func (this *Stopwatch) MarkMs() int64 {
-	return int64(this.Mark() / stdtime.Millisecond)
+	return int64(this.Mark() / time.Millisecond)
 }
 
 // MarkSec returns the elapsed time in whole seconds without stopping the
 // underlying timer.
 func (this *Stopwatch) MarkSec() int64 {
-	return int64(this.Mark() / stdtime.Second)
+	return int64(this.Mark() / time.Second)
 }
 
 // Restart resets and then starts the current timer.
@@ -76,15 +76,15 @@ func (this *Stopwatch) Start() {
 	defer this.mutex.Unlock()
 
 	this.running   = true
-	this.startTime = stdtime.Now()
+	this.startTime = time.Now()
 }
 
 // Stop ends the time measurement, storing and returning the elapsed duration.
-func (this *Stopwatch) Stop() stdtime.Duration {
+func (this *Stopwatch) Stop() time.Duration {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	this.duration = stdtime.Since(this.startTime)
+	this.duration = time.Since(this.startTime)
 	this.running  = false
 
 	return this.duration
