@@ -17,6 +17,7 @@ import (
 	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/lifecycle"
+	"github.com/xaevman/goat/lib/perf"
 )
 
 // Stdlib imports.
@@ -24,6 +25,33 @@ import (
 	"fmt"
 	"strings"
 )
+
+// Perf counters.
+const (
+	PERF_CHAT_SRV_CONNECT = iota
+	PERF_CHAT_SRV_CONNECT_MSG
+	PERF_CHAT_SRV_CREATE_CHAN
+	PERF_CHAT_SRV_DISCONNECT
+	PERF_CHAT_SRV_DIST_MSG
+	PERF_CHAT_SRV_JOIN_CHAN
+	PERF_CHAT_SRV_LEAVE_CHAN
+	PERF_CHAT_SRV_SET_NAME
+	PERF_CHAT_SRV_TIMEOUT
+	PERF_CHAT_SRV_COUNT
+)
+
+// Perf counter friendly names.
+var chatSrvPerfNames = []string {
+	"Connect",
+	"ConnectMessage",
+	"CreateChannel",
+	"Disconnect",
+	"DistMessage",
+	"JoinChannel",
+	"LeaveChannel",
+	"SetName",
+	"MessageTimeout",
+}
 
 // ChatSrv implements the server side of of a chat application based on the
 // protocol defined in proto/chat.
@@ -33,6 +61,7 @@ type ChatSrv struct {
 	chanNameMap  map[string]*net.BroadcastGroup
 	evtHandler   *net.EventChan
 	msgProc      *MsgHandler
+	perfs        *perf.CounterSet
 	shutdownChan chan bool
 	srv          *net.TCPSrv
 	syncObj      *lifecycle.Lifecycle
@@ -48,6 +77,11 @@ func NewChatSrv(addr string) *ChatSrv {
 		chanNameMap  : make(map[string]*net.BroadcastGroup, 0),
 		evtHandler   : net.NewEventChan(),
 		msgProc      : new(MsgHandler),
+		perfs        : perf.NewCounterSet(
+			"Chat.Srv." + addr,
+			PERF_CHAT_SRV_COUNT,
+			chatSrvPerfNames,
+		),
 		shutdownChan : make(chan bool, 0),
 		srv          : net.NewTCPSrv(),
 	    syncObj      : lifecycle.New(),
@@ -113,6 +147,8 @@ func (this *ChatSrv) createChannel(name string) *net.BroadcastGroup {
 		this.chanNameMap[ch.Name()] = ch
 
 		Protocol.RegisterConnection(ch)
+
+		this.perfs.Increment(PERF_CHAT_SRV_CREATE_CHAN)
 	}
 
 	return ch
@@ -160,10 +196,13 @@ func (this *ChatSrv) handleIO() {
 		case msg := <-this.msgProc.QueryReceiveMsg():
 			this.handleMsg(msg)
 		case <-this.evtHandler.QueryConnect():
+			this.perfs.Increment(PERF_CHAT_SRV_CONNECT)
 			continue
 		case con := <-this.evtHandler.QueryDisconnect():
+			this.perfs.Increment(PERF_CHAT_SRV_DISCONNECT)
 			this.handleDisco(con)
 		case timeout := <-this.evtHandler.QueryTimeout():
+			this.perfs.Increment(PERF_CHAT_SRV_TIMEOUT)
 			log.Error("%+v", timeout)
 		case <-this.syncObj.QueryShutdown():
 		}
@@ -180,20 +219,23 @@ func (this *ChatSrv) handleIO() {
 // handleMsg reads new messages and redistributes them to their appropriate
 // handlers based on subtype.
 func (this *ChatSrv) handleMsg(msg *Msg) {
-	log.Debug("RX: %+v", msg)
-
 	switch msg.Subtype {
 	case MSG_SUB_CHAT:
+		this.perfs.Increment(PERF_CHAT_SRV_DIST_MSG)
 		this.distChatMsg(msg)
 	case MSG_SUB_CMD:
 		return
 	case MSG_SUB_CONNECT:
+		this.perfs.Increment(PERF_CHAT_SRV_CONNECT_MSG)
 		this.handleConnect(msg)
 	case MSG_SUB_JOIN_CHANNEL:
+		this.perfs.Increment(PERF_CHAT_SRV_JOIN_CHAN)
 		this.handleJoinChan(msg)
 	case MSG_SUB_LEAVE_CHANNEL:
+		this.perfs.Increment(PERF_CHAT_SRV_LEAVE_CHAN)
 		return
 	case MSG_SUB_SET_NAME:
+		this.perfs.Increment(PERF_CHAT_SRV_SET_NAME)
 		this.handleSetName(msg)
 	}
 }
@@ -209,7 +251,6 @@ func (this *ChatSrv) handleConnect(msg *Msg) {
 	msg.From      = ""
 	msg.ToId      = toId
 
-	log.Debug("TX: %+v", msg)
 	go this.msgProc.SendMsg(toId, msg)
 
 	// send welcome message
@@ -246,7 +287,6 @@ func (this *ChatSrv) handleSetName(msg *Msg) {
 
 // send transmits a new message through the message processor.
 func (this *ChatSrv) send(toId uint32, msg *Msg) {
-	log.Debug("TX: %+v", msg)
 	this.msgProc.SendMsg(toId, msg)
 }
 

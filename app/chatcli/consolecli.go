@@ -19,7 +19,7 @@ import (
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/console"
 	"github.com/xaevman/goat/lib/lifecycle"
-	"github.com/xaevman/goat/proto/chat"
+	"github.com/xaevman/goat/prod/chat"
 )
 
 // Stdlib imports.

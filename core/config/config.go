@@ -18,6 +18,7 @@ package config
 
 // External imports.
 import (
+	"github.com/xaevman/goat/lib/perf"
 	"github.com/xaevman/goat/lib/str"
 	"github.com/xaevman/goat/core/log"
 )
@@ -31,6 +32,26 @@ import(
 	"sync"
 )
 
+// Perf counters.
+const (
+	PERF_CFG_PROVIDER_REGISTERED = iota
+	PERF_CFG_PROVIDER_UNREGISTERED
+	PERF_CFG_COUNT
+)
+
+// Perf counter friendly names.
+var cfgPerfNames = []string {
+	"ProviderRegistered",
+	"ProviderUnregistered",
+}
+
+// Perf counters.
+var cfgPerfs = perf.NewCounterSet(
+	"Module.Config",
+	PERF_CFG_COUNT,
+	cfgPerfNames,
+)
+
 // Common error message format.
 const ERR_KEY_NOT_FOUND = "Key not found: %v, default: %v"
 
@@ -39,7 +60,7 @@ var mutex sync.Mutex
 
 // Handling of default values.
 var (
-	m_defaultEntry  = ConfigEntry {
+	m_defaultEntry    = ConfigEntry {
 		key: 	"DefaultEntry",
 		parser: &m_defaultProvider,
 		vals:   []string {},
@@ -50,8 +71,9 @@ var (
 // Map and priority list of registered clients.
 var (
 	providerMap = map[string]*list.Element {}
-	priList   = list.New()
+	priList     = list.New()
 )
+
 
 // ConfigProvider defines the interface that should be implemnted by
 // config providers.
@@ -320,6 +342,8 @@ func RegisterConfigProvider(provider ConfigProvider) {
 		}
 	}
 
+	cfgPerfs.Increment(PERF_CFG_PROVIDER_REGISTERED)
+
 	log.Info("ConfigProvider %v registered", provider.Name())
 }
 
@@ -340,6 +364,8 @@ func UnregisterConfigProvider(provider ConfigProvider) {
 
 	priList.Remove(e)
 	delete(providerMap, provider.Name())
+
+	cfgPerfs.Increment(PERF_CFG_PROVIDER_UNREGISTERED)
 	
 	log.Info("ConfigProvider %v unregistered", provider.Name())
 }

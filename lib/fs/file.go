@@ -13,7 +13,9 @@
 package fs
 
 import (
+	"path/filepath"
 	"os"
+	"os/exec"
 )
 
 // Default permissions for simple file operations (u:rwx, g:rx, o: ).
@@ -42,6 +44,27 @@ func AppendFilePerm(path string, perm os.FileMode) (*os.File, error) {
 		os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_WRONLY,
 		perm,
 	)
+}
+
+// ExeFile attempts to find and return the executing binary's full path.
+func ExeFile() string {
+	rootPath := filepath.Dir(os.Args[0])
+
+	if rootPath == "." {
+		rootPath, err := exec.LookPath(os.Args[0])
+		if err != nil {
+			return os.Args[0]
+		}
+
+		rootPath, err = filepath.Abs(rootPath)
+		if err != nil {
+			return os.Args[0]
+		}
+
+		return rootPath
+	}
+	
+	return os.Args[0]
 }
 
 // FileExists tests to see if a given file exists on disk and returns

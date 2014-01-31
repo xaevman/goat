@@ -18,6 +18,7 @@ package chat
 import (
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/buffer"
+	"github.com/xaevman/goat/lib/perf"
 )
 
 // Stdlin imports.
@@ -27,6 +28,32 @@ import (
 
 // Chat module name.
 const CHAT_MOD_NAME = "Chat"
+
+// Perf counters.
+const (
+	PERF_CHAT_ERR_BAD_OBJ = iota
+	PERF_CHAT_ERR_CON_NIL
+	PERF_CHAT_ERR_DESERIALIZE
+	PERF_CHAT_RCV
+	PERF_CHAT_SEND
+	PERF_CHAT_COUNT
+)
+
+// Perf counter friendly names
+var perfChatNames = []string {
+	"ErrorBadObject",
+	"ErrorConnectionNil",
+	"ErrorDeserializeFailed",
+	"MessageReceived",
+	"MessageSent",
+}
+
+// Perf counters.
+var chatPerfs = perf.NewCounterSet(
+	"Chat",
+	PERF_CHAT_COUNT,
+	perfChatNames,
+)
 
 // Chat service message types.
 const (
@@ -75,21 +102,6 @@ type Msg struct {
 	Subtype   byte
 	ToId      uint32
 	Text      string
-}
-
-// Duplicate creates a copy of the given message and returns a pointer
-// to it for use.
-func (this *Msg) Duplicate() *Msg {
-	newMsg          := new(Msg)
-	newMsg.Access    = this.Access
-	newMsg.ChannelId = this.ChannelId
-	newMsg.From      = this.From
-	newMsg.FromId    = this.FromId
-	newMsg.Subtype   = this.Subtype
-	newMsg.ToId      = this.ToId
-	newMsg.Text      = this.Text
-
-	return newMsg
 }
 
 // DeserializeMsg takes serialized data and creates a new Msg object
@@ -176,16 +188,20 @@ func (this *MsgHandler) QueryReceiveMsg() <-chan *Msg {
 func (this *MsgHandler) ReceiveMsg(msg *net.Msg, access byte) error {
 	chatMsg := DeserializeMsg(msg.GetPayload())
 	if chatMsg == nil {
+		chatPerfs.Increment(PERF_CHAT_ERR_DESERIALIZE)
 		return errDeserializeFailed
 	}
 
 	con := msg.Connection()
 	if con == nil {
+		chatPerfs.Increment(PERF_CHAT_ERR_CON_NIL)
 		return errConNil
 	}
 
 	chatMsg.Access = access
 	chatMsg.FromId = con.Id()
+
+	chatPerfs.Increment(PERF_CHAT_RCV)
 
 	this.rcvChan<- chatMsg
 
@@ -198,6 +214,7 @@ func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
 	msgObj := data.(*Msg)
 
 	if msgObj == nil {
+		chatPerfs.Increment(PERF_CHAT_ERR_BAD_OBJ)
 		return errors.New("Non chat.Msg object received")
 	}
 
@@ -207,10 +224,12 @@ func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
 	netMsg.SetPayload(dataBuffer)
 	netMsg.SetTimeout(CHAT_MSG_SEND_TIMEOUT_SEC)
 
+	chatPerfs.Increment(PERF_CHAT_SEND)
+
 	return this.parent.SendMsg(targetId, netMsg)
 }
 
 // Signature returns CHAT_MSG.
-func (this *MsgHandler) Signature() uint16 { 
-	return CHAT_MSG 
+func (this *MsgHandler) Signature() uint16 {
+	return CHAT_MSG
 }

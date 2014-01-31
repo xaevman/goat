@@ -65,8 +65,8 @@ var (
         "TimerIdleMs",
         "TimerInfoMs",
     }
-    logPerfs     = perf.NewCounterSet(
-        "Service.Log",
+    logPerfs = perf.NewCounterSet(
+        "Module.Log",
         PERF_LOG_COUNT,
         logPerfNames,
     )

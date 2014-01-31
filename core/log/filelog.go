@@ -82,7 +82,7 @@ func InitFileLog() {
         flush   : make(chan bool,   1),
         info    : make(chan string, DEFAULT_BUFFER_DEPTH),
         perfs   : perf.NewCounterSet(
-            "Service.Log.FileLog",
+            "Module.Log." + FL_MOD_NAME,
             PERF_FLOG_COUNT,
             perfNames,
         ),

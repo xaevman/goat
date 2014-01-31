@@ -61,7 +61,7 @@ var appTimerNames = []string {
 var (
 	appName     string
 	appPerfs    = perf.NewCounterSet(
-		"Service.GoApp", 
+		"Module.GoApp", 
 		PERF_APP_COUNT, 
 		appTimerNames,
 	)

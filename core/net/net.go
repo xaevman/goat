@@ -78,7 +78,7 @@ var (
 		"TimeoutSend",
 	}
 	netPerfs     = perf.NewCounterSet(
-		"Service.Net",
+		"Module.Net",
 		PERF_NET_COUNT,
 		netPerfNames,
 	)
@@ -422,8 +422,8 @@ func onDisconnect(con Connection) {
 func onTimeout(
 	timeoutType int,
 	messageType uint16,
-	parentId uint32,
-	data interface{},
+	parentId    uint32,
+	data        interface{},
 ) {
 	switch timeoutType {
 	case TIMEOUT_CONNECT:

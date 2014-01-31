@@ -325,7 +325,7 @@ func (this *Protocol) onDisconnect(con Connection) {
 // perfName returns the name to be used for registering with the perf provider,
 // given the supplied base name.
 func perfName(baseName string) string {
-	return fmt.Sprintf("Service.Net.Proto.%s", baseName)
+	return fmt.Sprintf("Module.Net.Proto.%s", baseName)
 }
 
 // rcvMsg is the message pipeline for incoming messages. First, the protocol

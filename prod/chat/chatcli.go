@@ -14,10 +14,26 @@ package chat
 
 // External imports.
 import (
-	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/lifecycle"
+	"github.com/xaevman/goat/lib/perf"
 )
+
+// Perf counters.
+const (
+	PERF_CHAT_CLI_RCV = iota
+	PERF_CHAT_CLI_SEND
+	PERF_CHAT_CLI_TIMEOUT
+	PERF_CHAT_CLI_COUNT
+)
+
+// Perf counter friendly names.
+var chatCliPerfNames = []string {
+	"MessageReceived",
+	"MessageSent",
+	"MessageTimeout",
+}
+
 
 // ChatCliNotifier defines the inteface for customized implementations
 // of a chat client.
@@ -38,6 +54,7 @@ type ChatCli struct {
 	msgProc     *MsgHandler
 	username    string
 	notifier    ChatCliNotifier
+	perfs       *perf.CounterSet
 	srv         *net.TCPCli
 	syncObj     *lifecycle.Lifecycle
 }
@@ -50,6 +67,11 @@ func NewChatCli(notify ChatCliNotifier) *ChatCli {
 		msgProc    : new(MsgHandler),
 		username   : "Anon",
 		notifier   : notify,
+		perfs      : perf.NewCounterSet(
+			"Chat.Cli",
+			PERF_CHAT_CLI_COUNT,
+			chatCliPerfNames,
+		),
 		srv        : net.NewTCPCli(),
 		syncObj    : lifecycle.New(),
 	}
@@ -67,7 +89,7 @@ func NewChatCli(notify ChatCliNotifier) *ChatCli {
 func (this *ChatCli) Connect(addr string) error {
 	go this.handleIO()
 
-	return this.srv.Dial(addr)	
+	return this.srv.Dial(addr)
 }
 
 // Shutdown begins the shutdown process for the client and blocks until
@@ -129,13 +151,14 @@ func (this *ChatCli) handleIO() {
 	for this.syncObj.QueryRun() {
 		select {
 		case msg := <-this.msgProc.QueryReceiveMsg():
-			log.Debug("RX: %+v", msg)
+			this.perfs.Increment(PERF_CHAT_CLI_RCV)
 			this.notifier.OnMsg(msg)
 		case con := <-this.evtHandler.QueryConnect():
 			this.notifier.OnConnect(con)
 		case con := <-this.evtHandler.QueryDisconnect():
 			this.notifier.OnDisconnect(con)
 		case timeout := <-this.evtHandler.QueryTimeout():
+			this.perfs.Increment(PERF_CHAT_CLI_TIMEOUT)
 			this.notifier.OnTimeout(timeout)
 		case <-this.syncObj.QueryShutdown():
 			this.notifier.OnShutdown()
@@ -152,6 +175,6 @@ func (this *ChatCli) handleIO() {
 
 // send transmits a Msg object to the server.
 func (this *ChatCli) send(toId uint32, msg *Msg) {
-	log.Debug("TX: %+v", msg)
+	this.perfs.Increment(PERF_CHAT_CLI_SEND)
 	this.msgProc.SendMsg(toId, msg)
 }

@@ -15,7 +15,7 @@ package main
 // External imports.
 import (
 	"github.com/xaevman/goat/core/goapp"
-	"github.com/xaevman/goat/proto/chat"
+	"github.com/xaevman/goat/prod/chat"
 )
 
 // Stdlib imports.

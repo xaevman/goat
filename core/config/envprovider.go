@@ -14,37 +14,75 @@ package config
 
 // External imports
 import (
+	"github.com/xaevman/goat/lib/perf"
 	"github.com/xaevman/goat/lib/str"
 )
 
 // Stdlib imports
 import(
 	"os"
+	"sync"
 )
+
+// Perf counters.
+const (
+	PERF_CFG_ENV_PRIORITY = iota
+	PERF_CFG_ENV_QUERIES
+	PERF_CFG_ENV_COUNT
+)
+
+// Perf counter friendly names.
+var cfgEnvPerfNames = []string {
+	"Priority",
+	"Queries",
+}
 
 // Environment provider module name.
 const ENV_MOD_NAME = "EnvProvider"
+
+// Static instance and synchronization
+var envMutex    sync.Mutex
+var envProvider *EnvProvider
 
 // InitEnvProvider initializes a new EnvProvider config provider, registers it with
 // the config services, and returns a pointer to the object for direct use,
 // if required.
 func InitEnvProvider(pri int) *EnvProvider {
-	envProvider := EnvProvider {
-		moduleName: ENV_MOD_NAME,
-		priority:   pri,
+	envMutex.Lock()
+	defer envMutex.Unlock()
+
+	if envProvider == nil {
+		envProvider = &EnvProvider {
+			moduleName : ENV_MOD_NAME,
+			perfs      : perf.NewCounterSet(
+				"Module.Config." + ENV_MOD_NAME,
+				PERF_CFG_ENV_COUNT,
+				cfgEnvPerfNames,
+			),
+			priority   : pri,
+		}
 	}
 
-	RegisterConfigProvider(&envProvider)
+	if pri == envProvider.Priority() {
+		return envProvider
+	}
 
-	return &envProvider
+	UnregisterConfigProvider(envProvider)
+	envProvider.priority = pri
+
+	envProvider.perfs.Set(PERF_CFG_ENV_PRIORITY, int64(pri))
+
+	RegisterConfigProvider(envProvider)
+
+	return envProvider
 }
 
 // EnvProvider represents a ConfigProvider implementation that queries the
 // system environment for config entries.
 type EnvProvider struct {
 	moduleName string
+	perfs      *perf.CounterSet
 	priority   int
-
 }
 
 // GetEntriesByKey returns the requested environment variable, if present, 
@@ -58,6 +96,8 @@ func (this *EnvProvider) GetEntriesByKey(name string) []*ConfigEntry {
 		return nil
 	}
 
+	this.perfs.Increment(PERF_CFG_ENV_QUERIES)
+
 	return []*ConfigEntry { entry }
 }
 
@@ -69,6 +109,8 @@ func (this *EnvProvider) GetFirstEntryByKey(name string) *ConfigEntry {
 	if val == "" {
 		return nil
 	}
+
+	this.perfs.Increment(PERF_CFG_ENV_QUERIES)
 
 	return newEnvEntry(name, val, this)
 }

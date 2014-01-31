@@ -18,8 +18,12 @@ import(
 )
 
 func TestConfig(t *testing.T) {
+	IniDir = "./"
+
 	InitEnvProvider(1)
-	InitIniProvider("./test.ini", 2)
+	if InitIniProvider("test.ini", 2) == nil {
+		t.Fatal("Ini file not found")
+	}
 
 	key         := "PATH"
 	data, entry := GetAllVals(key, "/bin:/sbin")

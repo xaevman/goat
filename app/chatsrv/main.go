@@ -19,7 +19,7 @@ import (
 	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/perf"
-	"github.com/xaevman/goat/proto/chat"
+	"github.com/xaevman/goat/prod/chat"
 )
 
 // Stdlib imports.
@@ -38,7 +38,9 @@ type ChatSrvStart struct {
 	srv *chat.ChatSrv
 }
 func (this *ChatSrvStart) PreInit() {
-	config.InitIniProvider("ChatSrv.ini", 1)	
+	config.InitIniProvider("chat.ini", 1)
+	debugLogs, _ := config.GetBoolVal("System.DebugLogs", 0, false)
+	log.DebugLogs = debugLogs
 }
 func (this *ChatSrvStart) PostInit() {
 	addr, _ := config.GetVal("ChatSrv.SrvAddr", 0, DEFAULT_ADDR)
@@ -48,10 +50,10 @@ func (this *ChatSrvStart) PostInit() {
 
 type ChatSrvLoop struct {}
 func (this *ChatSrvLoop) OnHeartbeat() {
-	netCounters := perf.GetCounterSet("Service.Net")
+	netCounters := perf.GetCounterSet("Module.Net")
 	msgRoute    := netCounters.Get(net.PERF_NET_MSG_ROUTE)
 
-	chatCounters := perf.GetCounterSet("Service.Net.Proto.Chat")
+	chatCounters := perf.GetCounterSet("Module.Net.Proto.Chat")
 	rcvRate      := chatCounters.Get(net.PERF_PROTO_RCV_OK)
 	sendRate     := chatCounters.Get(net.PERF_PROTO_SEND_OK)
 
