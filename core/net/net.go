@@ -37,6 +37,7 @@ import (
 
 // Stdlib imports.
 import (
+	"errors"
 	"hash/crc32"
 	"net"
 	"sync"
@@ -125,6 +126,12 @@ var (
 var (
 	eventHandler EventHandler
 	eventMutex   sync.RWMutex
+)
+
+// Common error messages.
+var (
+	ErrDeserializeFailed = errors.New("Deserialization failed")
+	ErrInvalidType       = errors.New("Invalid type received")
 )
 
 // AccessProvider specifies the interface which network protocols will use

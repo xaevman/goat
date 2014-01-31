@@ -19,6 +19,7 @@ import (
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/buffer"
 	"github.com/xaevman/goat/lib/perf"
+	"github.com/xaevman/goat/prod"	
 )
 
 // Stdlin imports.
@@ -55,11 +56,6 @@ var chatPerfs = perf.NewCounterSet(
 	perfChatNames,
 )
 
-// Chat service message types.
-const (
-	CHAT_MSG = iota
-)
-
 // Timeout value for sends.
 const CHAT_MSG_SEND_TIMEOUT_SEC = 5
 
@@ -83,8 +79,7 @@ var Protocol = net.NewProtocol(CHAT_MOD_NAME)
 
 // Common error messages.
 var (
-	errDeserializeFailed = errors.New("Deserialization of chat.Msg failed")
-	errConNil            = errors.New("net.Msg.Connection() is nil")
+	errConNil = errors.New("net.Msg.Connection() is nil")
 )
 
 
@@ -134,25 +129,25 @@ func DeserializeMsg(data []byte) *Msg {
 }
 
 // SerializeMsg converts a Msg object into a serialized stream of bytes.
-func SerializeMsg(Msg *Msg) []byte {
+func SerializeMsg(msg *Msg) []byte {
 	var cursor int = 0
 
 	dataLen := 
 		buffer.LenUint32()   		+
-		buffer.LenString(Msg.From) 	+
+		buffer.LenString(msg.From) 	+
 		buffer.LenUint32() 			+
 		buffer.LenByte() 			+
 		buffer.LenUint32() 			+
-		buffer.LenString(Msg.Text)
+		buffer.LenString(msg.Text)
 
 	data := make([]byte, dataLen)
 
-	buffer.WriteUint32(Msg.ChannelId, data, &cursor)
-	buffer.WriteString(Msg.From, data, &cursor)
-	buffer.WriteUint32(Msg.FromId, data, &cursor)
-	buffer.WriteByte(Msg.Subtype, data, &cursor)
-	buffer.WriteUint32(Msg.ToId, data, &cursor)
-	buffer.WriteString(Msg.Text, data, &cursor)
+	buffer.WriteUint32(msg.ChannelId, data, &cursor)
+	buffer.WriteString(msg.From, data, &cursor)
+	buffer.WriteUint32(msg.FromId, data, &cursor)
+	buffer.WriteByte(msg.Subtype, data, &cursor)
+	buffer.WriteUint32(msg.ToId, data, &cursor)
+	buffer.WriteString(msg.Text, data, &cursor)
 
 	return data
 }
@@ -189,7 +184,7 @@ func (this *MsgHandler) ReceiveMsg(msg *net.Msg, access byte) error {
 	chatMsg := DeserializeMsg(msg.GetPayload())
 	if chatMsg == nil {
 		chatPerfs.Increment(PERF_CHAT_ERR_DESERIALIZE)
-		return errDeserializeFailed
+		return net.ErrDeserializeFailed
 	}
 
 	con := msg.Connection()
@@ -215,7 +210,7 @@ func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
 
 	if msgObj == nil {
 		chatPerfs.Increment(PERF_CHAT_ERR_BAD_OBJ)
-		return errors.New("Non chat.Msg object received")
+		return net.ErrInvalidType
 	}
 
 	dataBuffer := SerializeMsg(msgObj)
@@ -231,5 +226,5 @@ func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
 
 // Signature returns CHAT_MSG.
 func (this *MsgHandler) Signature() uint16 {
-	return CHAT_MSG
+	return products.CHAT_MSG
 }
