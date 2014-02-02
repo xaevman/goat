@@ -139,7 +139,7 @@ func (this *Counter) String() string {
 	this.mutex.Unlock()
 
 	return fmt.Sprintf(
-		"value: %d, perSec: %.2f%s",
+		"value: %d, perSec: %d%s",
 		this.Value(),
 		this.PerSec(),
 		statTxt,

@@ -25,7 +25,8 @@ import (
 
 // TestMsg tests serialization/deserialization of Msg objects.
 func TestMsgSerialize(t *testing.T) {
-	cm := Msg {
+	handler := new(MsgHandler)
+	cm      := Msg {
 		ChannelId: 10,
 		From:      "Jared",
 		FromId:    12345,
@@ -34,8 +35,20 @@ func TestMsgSerialize(t *testing.T) {
 		Text:      "This is my test message! Rawr",
 	}
 
-	b     := SerializeMsg(&cm)
-	newCm := DeserializeMsg(b)
+	b, err := handler.SerializeMsg(&cm)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	obj, err := handler.DeserializeMsg(b, 255)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newCm, ok := obj.(*Msg)
+	if !ok {
+		t.Fatal("Invalid type received %T", obj)
+	}
 
 	if cm.ChannelId != newCm.ChannelId {
 		t.Fatalf(

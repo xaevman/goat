@@ -14,14 +14,13 @@ package net
 
 import (
 	"github.com/xaevman/goat/core/log"
-	"github.com/xaevman/goat/lib/perf"
 	"github.com/xaevman/goat/lib/str"
 )
 
 import (
+	"errors"
 	"hash/crc32"
 	"math/rand"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -33,20 +32,78 @@ const (
 )
 
 // Header values for HeaderOps test.
-var headerTests = []uint16{
+var headerTests = []uint16 {
 	0, 1, 4, 31, 64, 501, 1002, 1023,
 }
 
 // Shared data for TCP test.
 var (
-	msgCount    uint64 = 0
-	pingMsgProc        = new(PingMsgProc)
-	pingTxt            = "ping"
-	pongMsgProc        = new(PongMsgProc)
-	pongTxt            = "pong"
-	proto              = NewProtocol("TestProto")
-	srvAddr            = "127.0.0.1:6600"
+	cliproto    *Protocol
+	pingMsgProc = new(PingMsgProc)
+	pingTxt     = "ping"
+	pongMsgProc = new(PongMsgProc)
+	pongTxt     = "pong"
+	srvproto    *Protocol
+	srvAddr     = "127.0.0.1:8900"
 )
+
+// Test message format
+type PPMsg struct {
+	sender     uint32
+	senderAddr string
+	msgType    string
+}
+
+// Test EventHandler
+type PPEventHandler struct {
+	parent *Protocol
+	t      *testing.T
+}
+
+func (this *PPEventHandler) Close() {}
+
+func (this *PPEventHandler) Init(proto *Protocol) {
+	this.parent = proto
+}
+
+func (this *PPEventHandler) OnConnect(con Connection) {
+	log.Info("Connect (%s): %s", this.parent.name, con.RemoteAddr())
+}
+
+func (this *PPEventHandler) OnDisconnect(con Connection) {
+	log.Info("Disconnect (%s): %s", this.parent.name, con.RemoteAddr())
+}
+
+func (this *PPEventHandler) OnTimeout(timeout *TimeoutEvent) {
+	this.t.Fatalf("Timeout: %+v", timeout)
+}
+
+func (this *PPEventHandler) OnReceive(msg interface{}) {
+	// type switch
+	pingMsg, ok := msg.(*PPMsg)
+	if !ok {
+	    this.t.Fatalf("unexpected type %T", msg)
+	    return
+	}
+
+	log.Info(pingMsg.msgType)
+
+	if pingMsg.msgType == pongTxt {
+		return
+	}
+
+	// pong!
+	this.parent.SendMsg(pingMsg.sender, PONG_MSG_TYPE, pingMsg)
+}
+
+func (this *PPEventHandler) OnError(err error) {
+	this.t.Fatal(err)
+}
+
+func (this *PPEventHandler) OnShutdown() {
+	log.Info("Shutting down %s", this.parent.name)
+}
+
 
 // Ping message processor
 type PingMsgProc struct {
@@ -54,34 +111,42 @@ type PingMsgProc struct {
 }
 
 func (this *PingMsgProc) Close() {}
+
 func (this *PingMsgProc) Init(proto *Protocol) {
 	this.parent = proto
 }
-func (this *PingMsgProc) ReceiveMsg(msg *Msg, access byte) error {
-	log.Debug(
-		"[%v->%v]: %v",
-		msg.Connection().RemoteAddr(),
-		msg.Connection().LocalAddr(),
-		string(msg.GetPayload()),
-	)
 
-	// send a pong message back to client
-	return pongMsgProc.SendMsg(msg.Connection().Id(), pongTxt)
+func (this *PingMsgProc) DeserializeMsg(
+	msg    *Msg, 
+	access byte,
+) (interface{}, error) {
+	pingMsg           := new(PPMsg)
+	pingMsg.sender     = msg.Connection().Id()
+	pingMsg.senderAddr = msg.Connection().RemoteAddr().String()
+	pingMsg.msgType    = string(msg.GetPayload())
 
-	return nil
+	return pingMsg, nil
 }
-func (this *PingMsgProc) SendMsg(targetId uint32, data interface{}) error {
-	txt := data.(string)
-	msg := NewMsg()
+
+func (this *PingMsgProc) SerializeMsg(data interface{}) (*Msg, error) {
+	ppMsg, ok := data.(*PPMsg)
+	if !ok {
+		return nil, errors.New("Not a *PPMsg type")
+	}
+
+	ppMsg.msgType = pingTxt
+	msg          := NewMsg()
+
 	msg.SetMsgType(this.Signature())
-	msg.SetPayload([]byte(txt))
+	msg.SetPayload([]byte(ppMsg.msgType))
 
-	err := this.parent.sendMsg(targetId, msg)
-	return err
+	return msg, nil
 }
+
 func (this *PingMsgProc) Signature() uint16 {
 	return PING_MSG_TYPE
 }
+
 
 // Pong message processor
 type PongMsgProc struct {
@@ -89,31 +154,42 @@ type PongMsgProc struct {
 }
 
 func (this *PongMsgProc) Close() {}
+
 func (this *PongMsgProc) Init(proto *Protocol) {
 	this.parent = proto
 }
-func (this *PongMsgProc) ReceiveMsg(msg *Msg, access byte) error {
-	log.Debug(
-		"[%v->%v]: %v",
-		msg.Connection().RemoteAddr(),
-		msg.Connection().LocalAddr(),
-		string(msg.GetPayload()),
-	)
 
-	return nil
+func (this *PongMsgProc) DeserializeMsg(
+	msg    *Msg, 
+	access byte,
+) (interface{}, error) {
+	pingMsg           := new(PPMsg)
+	pingMsg.sender     = msg.Connection().Id()
+	pingMsg.senderAddr = msg.Connection().RemoteAddr().String()
+	pingMsg.msgType    = string(msg.GetPayload())
+
+	return pingMsg, nil
 }
-func (this *PongMsgProc) SendMsg(targetId uint32, data interface{}) error {
-	txt := data.(string)
-	msg := NewMsg()
+
+func (this *PongMsgProc) SerializeMsg(data interface{}) (*Msg, error) {
+	ppMsg, ok := data.(*PPMsg)
+	if !ok {
+		return nil, errors.New("Not a *PPMsg type")
+	}
+
+	ppMsg.msgType = pongTxt
+	msg          := NewMsg()
+
 	msg.SetMsgType(this.Signature())
-	msg.SetPayload([]byte(txt))
+	msg.SetPayload([]byte(ppMsg.msgType))
 
-	err := this.parent.sendMsg(targetId, msg)
-	return err
+	return msg, nil
 }
+
 func (this *PongMsgProc) Signature() uint16 {
 	return PONG_MSG_TYPE
 }
+
 
 // TestHeaderOpts runs all of the header set and get options on a variety
 // of header message type signatures.
@@ -127,16 +203,18 @@ func TestHeaderOps(t *testing.T) {
 func TestTCPSrv(t *testing.T) {
 	log.Info("")
 
-	//log.DebugLogs = true
+	// log.DebugLogs = true
 
-	// set up the protocol
-	proto.AddSignature(pingMsgProc)
-	proto.AddSignature(pongMsgProc)
-	proto.SetAccessProvider(new(NoSecurity))
+	srvHandler  := new(PPEventHandler)
+	srvHandler.t = t
+	srvproto     = NewProtocol("SrvProto", srvHandler)
 
-	// fire up the tcp server
-	srv := NewTCPSrv()
-	srv.Start(srvAddr)
+	// set up the protocols
+	srvproto.AddSignature(pingMsgProc)
+	srvproto.AddSignature(pongMsgProc)
+	srvproto.SetAccessProvider(new(NoSecurity))
+
+	srvproto.ListenTcp(srvAddr)
 
 	<-time.After(1 * time.Second)
 
@@ -147,10 +225,12 @@ func TestTCPSrv(t *testing.T) {
 	runSimpleTcpTest(10, 1, t)
 	runSimpleTcpTest(10, 10, t)
 	runSimpleTcpTest(10, 100, t)
+	runSimpleTcpTest(100, 1, t)
+	runSimpleTcpTest(100, 10, t)
+	runSimpleTcpTest(100, 100, t)
 
 	// shut everything down gracefully
-	proto.Shutdown()
-	srv.Stop()
+	srvproto.Shutdown()
 }
 
 // runSimpleTcpTest spawns the given number of clients and asks them to send the
@@ -159,20 +239,19 @@ func TestTCPSrv(t *testing.T) {
 func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 	log.Info("SimpleTcpTest (%v clients, %v msg/cli)", cliCount, sendCount)
 
-	proto.perfs.Reset()
+	cliHandler  := new(PPEventHandler)
+	cliHandler.t = t
+	cliproto     = NewProtocol("CliProto", cliHandler)
 
-	cliList := make([]*TCPCli, 0)
+	cliproto.AddSignature(pingMsgProc)
+	cliproto.AddSignature(pongMsgProc)
+	cliproto.SetAccessProvider(new(NoSecurity))
 
 	for i := 0; i < cliCount; i++ {
-		cli := NewTCPCli()
-		err := cli.Dial(srvAddr)
-		if err != nil {
-			t.Fatal(err)
-			return
-		}
-
-		cliList = append(cliList, cli)
+		cliproto.DialTcp(srvAddr)
 	}
+
+	cliList := cliproto.GetAllConnections()
 
 	log.Info("%v clients connected", len(cliList))
 	doneChan := make(chan bool)
@@ -192,32 +271,29 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 
 	<-time.After(1 * time.Second)
 
-	perfTotal := proto.perfs.Get(PERF_PROTO_SEND_TOTAL).Value()
+	perfTotal := cliproto.perfs.Get(PERF_PROTO_SEND_TOTAL).Value()
 
 	log.Info(
-		"%v clients, (%v, %v) messages in %v (%.2f msg/sec)",
+		"%d clients, %d messages in %v (%.2f msg/sec)",
 		len(cliList),
-		msgCount,
 		perfTotal,
 		runTime,
-		float64(perfTotal)/runTime.Seconds(),
+		float64(perfTotal) / runTime.Seconds(),
 	)
-
-	log.Info(perf.DumpString())
 }
 
 // runClient connects to the test TCPSrv instance and sends lots of
 // messages at semi-random intervals.
-func runClient(cli *TCPCli, sendCount int, doneChan chan bool, t *testing.T) {
+func runClient(cli Connection, sendCount int, doneChan chan bool, t *testing.T) {
 	for i := 0; i < sendCount; i++ {
-		pingMsgProc.SendMsg(cli.Socket().Id(), pingTxt)
-		atomic.AddUint64(&msgCount, 1)
+		ppMsg := new(PPMsg)
+		cliproto.SendMsg(cli.Id(), PING_MSG_TYPE, ppMsg)
 
 		// simulate a normal amount of internet latency
 		<-time.After(time.Duration(rand.Intn(5)+15) * time.Millisecond)
 	}
 
-	cli.Shutdown()
+	cli.Close()
 	doneChan <- true
 }
 

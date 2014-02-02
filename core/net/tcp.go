@@ -21,7 +21,6 @@ import (
 // Stdlib imports.
 import (
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -30,193 +29,151 @@ import (
 const TCP_BUFFER_SIZE_B = 1 * 1024 // 1KB
 
 
-// TCPCli represents a TCP client object. The client object handles connecting
-// to server processes and manages basic IO and synchronization tasks, accepting
-// data from, and passing data up to, the net service's registered Protocol
-// objects.
-type TCPCli struct {
-	discoChan chan *tcpCon
-	id        uint32
-	mutex     sync.RWMutex
-	srvSocket *tcpCon
-	syncObj   *lifecycle.Lifecycle
-}
-
-// NewTCPCli is a helper constructor function which returns a pointer to a
-// newly intialized TCPCli object for use.
-func NewTCPCli() *TCPCli {
-	cli := TCPCli{
-		discoChan: make(chan *tcpCon, 1),
-		id:        atomic.AddUint32(&netId, 1),
-		syncObj:   lifecycle.New(),
+// newtcpCli is a helper constructor function which returns a pointer to a
+// newly intialized tcpCli object for use.
+func newtcpCli(proto *Protocol) *tcpCli {
+	cli := tcpCli{
+		id       : atomic.AddUint32(&netId, 1),
+		protocol : proto,
 	}
 
 	return &cli
 }
 
-// Dial connects the TCPCli object to a new server endpoint.
-func (this *TCPCli) Dial(addr string) error {
+// tcpCli represents a TCP client object. The client object handles connecting
+// to server processes and manages basic IO and synchronization tasks, accepting
+// data from, and passing data up to, the net service's registered Protocol
+// objects.
+type tcpCli struct {
+	id        uint32
+	protocol  *Protocol
+	srvSocket *tcpCon
+}
+
+// Start connects the tcpCli object to a new server endpoint.
+func (this *tcpCli) Start(addr string) (Connection, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		log.Error("%v", err)
-		return err
+		return nil, err
 	}
 
 	tCon := tcpCon{
-		discoChan: this.discoChan,
-		id:        atomic.AddUint32(&netId, 1),
-		readChan:  make(chan []byte),
-		socket:    conn.(*net.TCPConn),
-		syncObj:   lifecycle.New(),
-		writeChan: make(chan []byte),
+		discoChan   : this.protocol.discoChan,
+		id          : atomic.AddUint32(&netId, 1),
+		rcvChan     : this.protocol.rcvChan,
+		readChan    : make(chan []byte),
+		socket      : conn.(*net.TCPConn),
+		syncObj     : lifecycle.New(),
+		timeoutChan : this.protocol.timeoutChan,
+		writeChan   : make(chan []byte),
 	}
-
-	this.srvSocket = &tCon
-
-	go onConnect(&tCon)
 
 	tCon.startHandlers()
 
-	go func() {
-		for this.syncObj.QueryRun() {
-			select {
-			case srv := <-this.discoChan:
-				go onDisconnect(srv)
-			case <-this.syncObj.QueryShutdown():
-				log.Debug("Shutting down TCPCli %v", this.id)
-			}
-		}
+	this.srvSocket = &tCon
 
-		this.syncObj.ShutdownComplete()
-	}()
-
-	return nil
+	return &tCon, nil
 }
 
-// Shutdown closes the TCPCli's existing socket as well as all of the
+// Stop closes the tcpCli's existing socket as well as all of the
 // client's go routines.
-func (this *TCPCli) Shutdown() {
+func (this *tcpCli) Stop() {
 	this.srvSocket.Close()
-	this.syncObj.Shutdown()
 }
 
-// Socket returns the socket which is open to the remote server.
-func (this *TCPCli) Socket() *tcpCon {
-	return this.srvSocket
-}
 
-// TCPSrv represents a TCP server object. The server object handles basic
-// communications, client synchronization, and error handling. Client code
-// only establishes a server listener via the server object. Sending and receiving
-// messages is done via Protocol objects registered with the net service.
-type TCPSrv struct {
-	discoChan chan *tcpCon
-	cliMap    map[uint32]*tcpCon
-	id        uint32
-	listener  net.Listener
-	mutex     sync.RWMutex
-	syncObj   *lifecycle.Lifecycle
-}
-
-// NewTCPSrv is a helper function which initializes a new TCPSrv instance
+// newtcpSrv is a helper function which initializes a new tcpSrv instance
 // and returns a pointer to it for use.
-func NewTCPSrv() *TCPSrv {
-	srv := TCPSrv{
-		discoChan: make(chan *tcpCon, 1),
-		cliMap:    make(map[uint32]*tcpCon, 0),
-		id:        atomic.AddUint32(&netId, 1),
-		syncObj:   lifecycle.New(),
+func newtcpSrv(proto *Protocol) *tcpSrv {
+	srv := tcpSrv{
+		id       : atomic.AddUint32(&netId, 1),
+		protocol : proto,
+		syncObj  : lifecycle.New(),
 	}
 
 	return &srv
 }
 
+// tcpSrv represents a TCP server object. The server object handles basic
+// communications, client synchronization, and error handling. Client code
+// only establishes a server listener via the server object. Sending and receiving
+// messages is done via Protocol objects registered with the net service.
+type tcpSrv struct {
+	id       uint32
+	listener net.Listener
+	protocol *Protocol
+	syncObj  *lifecycle.Lifecycle
+}
+
 // Start initializes and starts the TCP server in a new goroutine,
 // on the given network address.
-func (this *TCPSrv) Start(addr string) {
-	go func() {
-		ln, err := net.Listen("tcp", addr)
-		if err != nil {
-			log.Error("%v", err)
-			return
-		}
+func (this *tcpSrv) Start(addr string) (Connection, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Error("%v", err)
+		return nil, err
+	}
 
-		log.Info("Startup complete %v", addr)
+	this.listener = ln	
+	log.Info("Startup complete %v", addr)
 
-		this.listener = ln
-		go this.acceptConnections()
+	go this.acceptConnections()
 
-		for this.syncObj.QueryRun() {
-			select {
-			case cli := <-this.discoChan:
-				go onDisconnect(cli)
-				go this.removeClient(cli.Id())
-			case <-this.syncObj.QueryShutdown():
-				log.Info("Shutting down TCPSrv %v", addr)
-			}
-		}
-
-		this.syncObj.ShutdownComplete()
-	}()
+	return nil, nil
 }
 
 // Stop shuts the TCP server down.
-func (this *TCPSrv) Stop() {
-	this.mutex.RLock()
-	for _, cli := range this.cliMap {
-		cli.Close()
-	}
-	this.mutex.RUnlock()
-
-	this.syncObj.Shutdown()
+func (this *tcpSrv) Stop() {
+	go this.syncObj.Shutdown()
+	this.listener.Close()
 }
 
 // acceptConnections handles accepting connections from new clients.
-func (this *TCPSrv) acceptConnections() {
+func (this *tcpSrv) acceptConnections() {
 	for {
 		cliCon, err := this.listener.Accept()
 		if err != nil {
-			log.Error("%v", err)
+			if !this.syncObj.QueryRun() { 
+				break 
+			}
+
+			log.Error(err.Error())
 			continue
 		}
 
 		cli := tcpCon{
-			discoChan: this.discoChan,
-			id:        atomic.AddUint32(&netId, 1),
-			readChan:  make(chan []byte),
-			socket:    cliCon.(*net.TCPConn),
-			syncObj:   lifecycle.New(),
-			writeChan: make(chan []byte),
+			discoChan   : this.protocol.discoChan,
+			id          : atomic.AddUint32(&netId, 1),
+			rcvChan     : this.protocol.rcvChan,
+			readChan    : make(chan []byte),
+			socket      : cliCon.(*net.TCPConn),
+			syncObj     : lifecycle.New(),
+			timeoutChan : this.protocol.timeoutChan,
+			writeChan   : make(chan []byte),
 		}
 
-		this.mutex.Lock()
-		this.cliMap[cli.id] = &cli
-		this.mutex.Unlock()
-
-		go onConnect(&cli)
+		this.protocol.connectChan <- &cli
 
 		cli.startHandlers()
 	}
+
+	this.syncObj.ShutdownComplete()
 }
 
-// removeClient removes a client from the map of this server's clients.
-func (this *TCPSrv) removeClient(id uint32) {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
-
-	delete(this.cliMap, id)
-}
 
 // tcpCon represents a TCP connection.
 type tcpCon struct {
-	discoChan chan *tcpCon
-	id        uint32
-	key       string
-	nextMsg   *Msg
-	readChan  chan []byte
-	socket    *net.TCPConn
-	syncObj   *lifecycle.Lifecycle
-	writeChan chan []byte
+	discoChan   chan Connection
+	id          uint32
+	key         string
+	nextMsg     *Msg
+	rcvChan     chan *Msg
+	readChan    chan []byte
+	socket      *net.TCPConn
+	syncObj     *lifecycle.Lifecycle
+	timeoutChan chan *TimeoutEvent
+	writeChan   chan []byte
 }
 
 // close shuts down the client TCP connection.
@@ -250,7 +207,7 @@ func (this *tcpCon) Send(data []byte, timeoutSec int) {
 	case this.writeChan <- data:
 	case <-time.After(time.Duration(timeoutSec) * time.Second):
 		sig := GetMsgSig(GetMsgHeader(data))
-		onTimeout(TIMEOUT_SEND, sig, this.id, data)
+		this.notifyTimeout(TIMEOUT_SEND, sig, this.id, data)
 	}
 }
 
@@ -264,7 +221,7 @@ func (this *tcpCon) buildMsg(msgData []byte) []byte {
 	}
 
 	if this.nextMsg == nil {
-		this.nextMsg = NewMsg()
+		this.nextMsg = NewMsg(this.id)
 		this.nextMsg.SetConnection(this)
 	}
 
@@ -274,7 +231,7 @@ func (this *tcpCon) buildMsg(msgData []byte) []byte {
 		// dispatch message
 		dispatchMsg := this.nextMsg
 		this.nextMsg = nil
-		routeMsg(dispatchMsg)
+		this.notifyMsg(dispatchMsg)
 	}
 
 	return leftovers
@@ -332,14 +289,44 @@ func (this *tcpCon) handleWrites() {
 	}
 }
 
-// notifyDisco bubbles a disco event up to the tcpCon's parent TCPSrv so
-// that it can properly handle the client's disconnection.
+// notifyDisco bubbles a disco event up to the tcpCon's parent object.
 func (this *tcpCon) notifyDisco() {
 	this.syncObj.Shutdown()
 
-	if this.discoChan != nil {
-		this.discoChan <- this
+	if this.discoChan == nil {
+		return
 	}
+
+	this.discoChan<- this
+}
+
+// notifyMsg bubbles a received msg up to the tcpCon's parent object.
+func (this *tcpCon) notifyMsg(msg *Msg) {
+	if this.rcvChan == nil {
+		return
+	}
+
+	this.rcvChan<- msg
+}
+
+// notifyTimeout bubbles a timeout event up to the tcpCon's parent object.
+func (this *tcpCon) notifyTimeout(
+	kind int, 
+	sig  uint16, 
+	id   uint32, 
+	data interface{},
+) {
+	if this.timeoutChan == nil {
+		return
+	}
+
+	timeout            := new(TimeoutEvent)
+	timeout.Data        = data
+	timeout.MessageType = sig
+	timeout.ParentId    = id
+	timeout.TimeoutType = kind
+
+	this.timeoutChan<- timeout
 }
 
 // runCli runs in its own goroutine, handling read events that bubble up

@@ -20,24 +20,26 @@ import (
 
 // Msg represents the baseline structure of data used for packaging
 // network messages to be sent via the net service.
-type Msg struct {
+type Msg struct {	
 	con        Connection
 	cursor     int
 	data       []byte
+	from       uint32
 	hdrBuffer  []byte
 	header     uint64
 	timeoutSec int
 }
 
 // NewMsg initializes a new Msg object and returns a pointer to it for use.
-func NewMsg() *Msg {
+func NewMsg(fromId uint32) *Msg {
 	newMsg := Msg {
 		con        : nil,
 		cursor     : 0,
 		data       : nil,
+		from       : fromId,
 		header     : 0,
 		hdrBuffer  : make([]byte, HEADER_LEN_B),
-		timeoutSec : DEFAULT_TIMEOUT_SEC,
+		timeoutSec : DEFAULT_MSG_TIMEOUT_SEC,
 	}
 
 	return &newMsg
@@ -47,6 +49,12 @@ func NewMsg() *Msg {
 // Msg object.
 func (this *Msg) Connection() Connection {
 	return this.con
+}
+
+// From returns the local network ID of the network endpoint which
+// received this message.
+func (this *Msg) From() uint32 {
+	return this.from
 }
 
 // GetBytes retreives the Msg, fully serialized with header and

@@ -177,8 +177,12 @@ func SetLoopHandler(obj LoopHandler) {
 	loopHandler = obj
 }
 
-// Start sets the GoApp's name and starts its execution.
-func Start(name string, callback chan bool) {
+// Start sets the GoApp's name and starts its execution asynchronously.
+// Start returns a channel on which a signal will be sent when the 
+// application has finished running.
+func Start(name string) <-chan bool {
+	stopChan = make(chan bool, 0)
+	
 	runTimer.Start()
 
 	appPerfs = perf.NewCounterSet(
@@ -187,8 +191,9 @@ func Start(name string, callback chan bool) {
 		appTimerNames,
 	)
 
-	stopChan = callback
 	go startApp(name)
+
+	return stopChan
 }
 
 // Stop begins the shutdown process of the application.

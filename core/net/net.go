@@ -29,12 +29,6 @@
 // [8-32767] payload is msg size
 package net
 
-// External imports.
-import (
-	"github.com/xaevman/goat/core/log"
-	"github.com/xaevman/goat/lib/perf"
-)
-
 // Stdlib imports.
 import (
 	"errors"
@@ -43,53 +37,12 @@ import (
 	"sync"
 )
 
-// Perf counters.
-const (
-	PERF_NET_CONNECT = iota
-	PERF_NET_DISCONNECT
-	PERF_NET_MSG_ROUTE
-	PERF_NET_MSG_ROUTE_INVALID
-	PERF_NET_PROTO_REGISTER
-	PERF_NET_PROTO_UNREGISTER
-	PERF_NET_SIG_REGISTER
-	PERF_NET_SIG_UNREGISTER
-	PERF_NET_TIMEOUT_CONNECT
-	PERF_NET_TIMEOUT_DISCONNECT
-	PERF_NET_TIMEOUT_GENERAL
-	PERF_NET_TIMEOUT_RCV
-	PERF_NET_TIMEOUT_SEND
-	PERF_NET_COUNT
-)
-
-// Perf counters.
-var (
-	netPerfNames = []string {
-		"Connect",
-		"Disconnect",
-		"MessageRouted",
-		"MessageRouteInvalid",
-		"ProtocolRegistered",
-		"ProtocolUnregistered",
-		"SignatureRegistered",
-		"SignatureUnregistered",
-		"TimeoutConnect",
-		"TimeoutDisconnect",
-		"TimeoutGeneral",
-		"TimeoutReceive",
-		"TimeoutSend",
-	}
-	netPerfs     = perf.NewCounterSet(
-		"Module.Net",
-		PERF_NET_COUNT,
-		netPerfNames,
-	)
-)
-
 // Timeouts.
 const (
-	DEFAULT_TIMEOUT_SEC  = 30
-	MAX_SEND_TIMEOUT_SEC = 300
-	MIN_SEND_TIMEOUT_SEC = 5
+	DEFAULT_EVT_TIMEOUT_SEC = 5
+	DEFAULT_MSG_TIMEOUT_SEC = 15
+	MAX_TIMEOUT_SEC         = 300
+	MIN_TIMEOUT_SEC         = 1
 )
 
 // Message header constants.
@@ -120,12 +73,6 @@ var (
 	protoMap   = make(map[string]*Protocol)
 	routeMutex sync.RWMutex
 	sigMap     = make(map[uint16]*Protocol)
-)
-
-// Event handler and synchronization.
-var (
-	eventHandler EventHandler
-	eventMutex   sync.RWMutex
 )
 
 // Common error messages.
@@ -178,31 +125,35 @@ type CryptoProvider interface {
 	Init(proto *Protocol)
 }
 
-// EventHandler specifies the interface which TCP clients and servers
-// will use to notify subscribers of connect and disconnect events.
-type EventHandler interface {
-	OnDisconnect(con Connection)
-	OnConnect(con Connection)
-	OnTimeout(timeout *TimeoutEvent)
-}
-
-// MsgProcessor specifies the entry and exit points of the network system which
-// network protcols use to accept and distribute incoming messages as well as
-// accept and disseminate outgoing messages to the correct endpoints.
+// MsgProcessor specifies the interface which user code should implement
+// to define the serialization behavior of a given message signature.
 type MsgProcessor interface {
 	Close()
 	Init(proto *Protocol)
-	ReceiveMsg(msg *Msg, access byte) error
-	SendMsg(targetId uint32, data interface{}) error
+	DeserializeMsg(msg *Msg, access byte) (interface{}, error)
+	SerializeMsg(data interface{}) (*Msg, error)
 	Signature() uint16
 }
 
-// GetEventHandler returns the net service's registered EventHandler.
-func GetEventHandler() EventHandler {
-	eventMutex.RLock()
-	defer eventMutex.RUnlock()
+// NetConnector represents a connector to another network device. Some 
+// example implmentations of NetConnector are the built-in TCP and UDP
+// client and server objects.
+type NetConnector interface {
+	Start(addr string) (Connection, error)
+	Stop()
+}
 
-	return eventHandler
+// EventHandler represents the interface that user code should implement
+// to handle events from a given protocol registered in the network layer.
+type EventHandler interface {
+	Close()
+	Init(proto *Protocol)
+	OnConnect(con Connection)
+	OnDisconnect(con Connection)
+	OnTimeout(timeout *TimeoutEvent)
+	OnReceive(msg interface{})
+	OnError(err error)
+	OnShutdown()
 }
 
 // GetMsgCompressedFlag retrieves bit 11 of the message header, which is used
@@ -272,16 +223,6 @@ func GetMsgChecksum(header uint64) uint32 {
 	hash := uint32(header >> 32)
 
 	return hash
-}
-
-// SetEventHandler sets the EventHandler object responsible for passing
-// connect and disconnect events up from the client and server connection
-// layers.
-func SetEventHandler(handler EventHandler) {
-	eventMutex.Lock()
-	defer eventMutex.Unlock()
-
-	eventHandler = handler
 }
 
 // SetMsgChecksum sets bytes 4-8 to the computed crc32 hash of the payload
@@ -362,221 +303,4 @@ func SetMsgSize(header *uint64, size int) {
 // data buffer.
 func ValidateMsgHeader(msgData []byte) bool {
 	return len(msgData) >= HEADER_LEN_B
-}
-
-// onConnect is called by appropriate, connection-based client and server
-// objects to notify Protocols of clients coming into, and exiting, the system.
-func onConnect(con Connection) {
-	netPerfs.Increment(PERF_NET_CONNECT)
-
-	addr, _, _ := net.SplitHostPort(con.RemoteAddr().String())
-
-	log.Debug(
-		"%v[%v]->%v connected",
-		addr,
-		con.Id(),
-		con.LocalAddr(),
-	)
-
-	routeMutex.RLock()
-
-	for _, proto := range protoMap {
-		proto.onConnect(con)
-	}
-
-	routeMutex.RUnlock()
-
-	eventMutex.RLock()
-	defer eventMutex.RUnlock()
-
-	if eventHandler != nil {
-		eventHandler.OnConnect(con)
-	}
-}
-
-// onDisconnect is called by appropriate, connection-based client and server
-// objects to notify Protocols of clients coming into, and exiting, the system.
-func onDisconnect(con Connection) {
-	netPerfs.Increment(PERF_NET_DISCONNECT)
-
-	addr, _, _ := net.SplitHostPort(con.RemoteAddr().String())
-
-	log.Debug(
-		"%v[%v]->%v disconnected",
-		addr,
-		con.Id(),
-		con.LocalAddr(),
-	)
-
-	routeMutex.RLock()
-
-	for _, proto := range protoMap {
-		proto.onDisconnect(con)
-	}
-
-	routeMutex.RUnlock()
-
-	eventMutex.RLock()
-	defer eventMutex.RUnlock()
-
-	if eventHandler != nil {
-		eventHandler.OnDisconnect(con)
-	}
-}
-
-// onTimeout calls the existing EventHandler implementation's OnTimeout function
-// to notify higher level clients about network timeout events.
-func onTimeout(
-	timeoutType int,
-	messageType uint16,
-	parentId    uint32,
-	data        interface{},
-) {
-	switch timeoutType {
-	case TIMEOUT_CONNECT:
-		netPerfs.Increment(PERF_NET_TIMEOUT_CONNECT)
-	case TIMEOUT_DISCONNECT:
-		netPerfs.Increment(PERF_NET_TIMEOUT_DISCONNECT)
-	case TIMEOUT_GENERAL:
-		netPerfs.Increment(PERF_NET_TIMEOUT_GENERAL)
-	case TIMEOUT_RCV:
-		netPerfs.Increment(PERF_NET_TIMEOUT_RCV)
-	case TIMEOUT_SEND:
-		netPerfs.Increment(PERF_NET_TIMEOUT_SEND)
-	}
-
-	eventMutex.RLock()
-	defer eventMutex.RUnlock()
-
-	if eventHandler == nil {
-		return
-	}
-
-	timeout := TimeoutEvent{
-		Data:        data,
-		MessageType: messageType,
-		ParentId:    parentId,
-		TimeoutType: timeoutType,
-	}
-
-	eventHandler.OnTimeout(&timeout)
-}
-
-// routeMsg takes an incoming Msg and routes it to the appropriate protocol
-// if one is registered in the route map, otherwise the message is dropped.
-func routeMsg(msg *Msg) {
-	sig := GetMsgSig(msg.GetHeader())
-
-	routeMutex.RLock()
-	proto := sigMap[sig]
-	if proto == nil {
-		routeMutex.RUnlock()
-		netPerfs.Increment(PERF_NET_MSG_ROUTE_INVALID)
-		return
-	}
-	routeMutex.RUnlock()
-
-	proto.rcvMsg(msg)
-
-	netPerfs.Increment(PERF_NET_MSG_ROUTE)
-}
-
-// registerProtocol registers a new Protocol object with the net service.
-// This is done automatically when a new Protocol object is created.
-func registerProtocol(proto *Protocol) {
-	routeMutex.Lock()
-	defer routeMutex.Unlock()
-
-	if protoMap[proto.name] != nil {
-		log.Error(
-			"Protocol %v already registered. Aborting registration",
-			proto.name,
-		)
-		return
-	}
-
-	protoMap[proto.name] = proto
-
-	netPerfs.Increment(PERF_NET_PROTO_REGISTER)
-
-	log.Info("Protocol %v registered", proto.name)
-}
-
-// registerSignature registers and maps a message type signature to a
-// Protocol which will be used to process messages of that type.
-func registerSignature(sig uint16, proto *Protocol) {
-	routeMutex.Lock()
-	defer routeMutex.Unlock()
-
-	if protoMap[proto.name] == nil {
-		log.Error(
-			"Cannot register a Signature for an "+
-				"unregistered Protocol (sig: %v, proto: %v)",
-			sig,
-			proto.name,
-		)
-
-		return
-	}
-
-	if protoMap[proto.name] != proto {
-		log.Error(
-			"Error registering Signature: Specified protocol name "+
-				"is already registered, but with a different object "+
-				"(sig: %v, proto: %v)",
-			sig,
-			proto.name,
-		)
-
-		return
-	}
-
-	if sigMap[sig] != nil {
-		log.Error(
-			"Signature %v already registered. Aborting registration",
-			sig,
-		)
-
-		return
-	}
-
-	sigMap[sig] = proto
-
-	netPerfs.Increment(PERF_NET_SIG_REGISTER)
-
-	log.Info("Proto %v, Sig %v registered", proto.name, sig)
-}
-
-// unregisterProtocol removes a registered protocol from the net service and
-// also unregisters any related message type signatures.
-func unregisterProtocol(proto *Protocol) {
-	routeMutex.Lock()
-	defer routeMutex.Unlock()
-
-	if protoMap[proto.name] == proto {
-		delete(protoMap, proto.name)
-		netPerfs.Increment(PERF_NET_PROTO_UNREGISTER)
-		log.Info("Protocol %v unregistered", proto.name)
-	}
-
-	for k, v := range sigMap {
-		if v == proto {
-			delete(sigMap, k)
-			netPerfs.Increment(PERF_NET_SIG_UNREGISTER)
-			log.Info("Proto %v, Sig %v unregistered", proto.name, k)
-		}
-	}
-}
-
-// unregisterSignature removes a mapping between a message type signature
-// and the supplied Protocol if such a mapping exists.
-func unregisterSignature(sig uint16, proto *Protocol) {
-	routeMutex.Lock()
-	defer routeMutex.Unlock()
-
-	if sigMap[sig] == proto {
-		delete(sigMap, sig)
-		netPerfs.Increment(PERF_NET_SIG_UNREGISTER)
-		log.Info("Proto %v, Sig %v unregistered", proto.name, sig)
-	}
 }

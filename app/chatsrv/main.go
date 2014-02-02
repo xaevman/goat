@@ -14,60 +14,49 @@ package main
 
 // External imports.
 import (
-	"github.com/xaevman/goat/core/config"
 	"github.com/xaevman/goat/core/goapp"
-	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/perf"
-	"github.com/xaevman/goat/prod/chat"
 )
 
-// Stdlib imports.
-import (
-	"fmt"
-)
+// Application name.
+const APP_NAME = "ChatSrv"
 
 // Default config options.
 const (
 	DEFAULT_ADDR = "127.0.0.1:8900"
 )
 
-// ChatSrvStart is a goapp.AppStarter implementation which runs 
-// a ChatSrv instance.
-type ChatSrvStart struct {
-	srv *chat.ChatSrv
-}
-func (this *ChatSrvStart) PreInit() {
-	config.InitIniProvider("chat.ini", 1)
-	debugLogs, _ := config.GetBoolVal("System.DebugLogs", 0, false)
-	log.DebugLogs = debugLogs
-}
-func (this *ChatSrvStart) PostInit() {
-	addr, _ := config.GetVal("ChatSrv.SrvAddr", 0, DEFAULT_ADDR)
-	this.srv = chat.NewChatSrv(addr)
-	this.srv.Start()
+// Perf counters.
+const (
+	PERF_CHATSRV_CONNECT_MSG = iota
+	PERF_CHATSRV_CREATE_CHAN
+	PERF_CHATSRV_DIST_MSG
+	PERF_CHATSRV_JOIN_CHAN
+	PERF_CHATSRV_LEAVE_CHAN
+	PERF_CHATSRV_SET_NAME
+	PERF_CHATSRV_COUNT
+)
+
+// Perf friendly names.
+var perfNames = []string {
+	"ConnectMsg",
+	"CreateChannel",
+	"DistributeMsg",
+	"JoinChannel",
+	"LeaveChannel",
+	"SetName",
 }
 
-type ChatSrvLoop struct {}
-func (this *ChatSrvLoop) OnHeartbeat() {
-	netCounters := perf.GetCounterSet("Module.Net")
-	msgRoute    := netCounters.Get(net.PERF_NET_MSG_ROUTE)
+// Perf object.
+var perfs = perf.NewCounterSet(
+	APP_NAME,
+	PERF_CHATSRV_COUNT,
+	perfNames,
+)
 
-	chatCounters := perf.GetCounterSet("Module.Net.Proto.Chat")
-	rcvRate      := chatCounters.Get(net.PERF_PROTO_RCV_OK)
-	sendRate     := chatCounters.Get(net.PERF_PROTO_SEND_OK)
-
-	perfStr := fmt.Sprintf(
-		"route/sec: %d, rx/sec: %d, tx/sec: %d",
-		msgRoute.PerSec(),
-		rcvRate.PerSec(),
-		sendRate.PerSec(),
-	)
-
-	log.Info(perfStr)
-}
-func (this *ChatSrvLoop) PreLoop() {}
-func (this *ChatSrvLoop) PostLoop() {}
+// ChatSrv protocol instance.
+var proto = net.NewProtocol(APP_NAME, new(ChatSrv))
 
 
 // main is the application entry point.
@@ -77,8 +66,6 @@ func main() {
 
 	goapp.SetHeartbeat(1000) // 1000ms / 1sec
 
-	stopChan := make(chan bool, 0)
-	go goapp.Start("ChatSrv", stopChan)
-
+	stopChan := goapp.Start(APP_NAME)
 	<-stopChan
 }

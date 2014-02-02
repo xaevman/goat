@@ -15,13 +15,13 @@ package main
 // External imports.
 import (
 	"github.com/xaevman/goat/core/goapp"
-	"github.com/xaevman/goat/prod/chat"
+	"github.com/xaevman/goat/core/net"
 )
 
-// Stdlib imports.
-import (
-	"os"
-)
+
+const APP_NAME = "ChatCli"
+
+
 
 // Configurables.
 var (
@@ -29,36 +29,16 @@ var (
 	userName = "Anon"
 )
 
+// ChatSrv protocol instance.
+var chatCli = new(ChatCli)
+var proto   = net.NewProtocol(APP_NAME, chatCli)
 
-// ConsoleCliStart goapp.AppStarter implementation which runs a 
-// ConsoleCli based ChatCli instance.
-type ConsoleCliStart struct {}
-
-func (this *ConsoleCliStart) PreInit() {
-	if len(os.Args) > 1 {
-		srvAddr = os.Args[1]
-	}
-	if len(os.Args) > 2 {
-		userName = os.Args[2]
-	}
-}
-func (this *ConsoleCliStart) PostInit() {
-	adapter := NewConsoleCli()
-	chatCli := chat.NewChatCli(adapter)
-	chatCli.SetUsername(userName)
-	
-	err := chatCli.Connect(srvAddr)
-	if err != nil {
-		goapp.Stop()
-	}
-}
 
 // main is the application entry point.
 func main() {
 	goapp.SetAppStarter(new(ConsoleCliStart))
+	goapp.SetHeartbeat(1000)
 
-	stopChan := make(chan bool, 0)
-	goapp.Start("ConsoleChatCli", stopChan)
-
+	stopChan := goapp.Start(APP_NAME)
 	<-stopChan
 }

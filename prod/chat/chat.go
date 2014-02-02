@@ -18,43 +18,17 @@ package chat
 import (
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/buffer"
-	"github.com/xaevman/goat/lib/perf"
 	"github.com/xaevman/goat/prod"	
 )
 
 // Stdlin imports.
 import (
 	"errors"
+	"fmt"
 )
 
 // Chat module name.
 const CHAT_MOD_NAME = "Chat"
-
-// Perf counters.
-const (
-	PERF_CHAT_ERR_BAD_OBJ = iota
-	PERF_CHAT_ERR_CON_NIL
-	PERF_CHAT_ERR_DESERIALIZE
-	PERF_CHAT_RCV
-	PERF_CHAT_SEND
-	PERF_CHAT_COUNT
-)
-
-// Perf counter friendly names
-var perfChatNames = []string {
-	"ErrorBadObject",
-	"ErrorConnectionNil",
-	"ErrorDeserializeFailed",
-	"MessageReceived",
-	"MessageSent",
-}
-
-// Perf counters.
-var chatPerfs = perf.NewCounterSet(
-	"Chat",
-	PERF_CHAT_COUNT,
-	perfChatNames,
-)
 
 // Timeout value for sends.
 const CHAT_MSG_SEND_TIMEOUT_SEC = 5
@@ -74,14 +48,6 @@ const (
 	PUB_CHANNEL = "public"
 )
 
-// Network protocol object.
-var Protocol = net.NewProtocol(CHAT_MOD_NAME)
-
-// Common error messages.
-var (
-	errConNil = errors.New("net.Msg.Connection() is nil")
-)
-
 
 // Msg represents a message sent from one client to the chat system.
 // ChannelId is the channel that the message is being sent to. From is the 
@@ -95,133 +61,81 @@ type Msg struct {
 	From      string
 	FromId    uint32
 	Subtype   byte
-	ToId      uint32
 	Text      string
-}
-
-// DeserializeMsg takes serialized data and creates a new Msg object
-// from the data.
-func DeserializeMsg(data []byte) *Msg {
-	var cursor int = 0
-
-	var err error
-	msg := new(Msg)
-
-	msg.ChannelId, err = buffer.ReadUint32(data, &cursor)
-	if err != nil { return nil }
-
-	msg.From, err = buffer.ReadString(data, &cursor)
-	if err != nil { return nil }
-	
-	msg.FromId, err = buffer.ReadUint32(data, &cursor)
-	if err != nil { return nil }
-	
-	msg.Subtype, err = buffer.ReadByte(data, &cursor)
-	if err != nil { return nil }
-	
-	msg.ToId, err = buffer.ReadUint32(data, &cursor)
-	if err != nil { return nil }
-	
-	msg.Text, err = buffer.ReadString(data, &cursor)
-	if err != nil { return nil }
-
-	return msg
-}
-
-// SerializeMsg converts a Msg object into a serialized stream of bytes.
-func SerializeMsg(msg *Msg) []byte {
-	var cursor int = 0
-
-	dataLen := 
-		buffer.LenUint32()   		+
-		buffer.LenString(msg.From) 	+
-		buffer.LenUint32() 			+
-		buffer.LenByte() 			+
-		buffer.LenUint32() 			+
-		buffer.LenString(msg.Text)
-
-	data := make([]byte, dataLen)
-
-	buffer.WriteUint32(msg.ChannelId, data, &cursor)
-	buffer.WriteString(msg.From, data, &cursor)
-	buffer.WriteUint32(msg.FromId, data, &cursor)
-	buffer.WriteByte(msg.Subtype, data, &cursor)
-	buffer.WriteUint32(msg.ToId, data, &cursor)
-	buffer.WriteString(msg.Text, data, &cursor)
-
-	return data
 }
 
 
 // MsgHandler handles the network IO operations surrounding a
 // Msg object.
-type MsgHandler struct {
-	parent  *net.Protocol
-	rcvChan chan *Msg
-}
+type MsgHandler struct {}
 
 // Close is a no-op for MsgHandler
 func (this *MsgHandler) Close() {}
 
 // Init saves the reference to the parent protocol and initializes the
 // receive channel for use.
-func (this *MsgHandler) Init(proto *net.Protocol) {
-	this.parent  = proto
-	this.rcvChan = make(chan *Msg, 0)
-}
+func (this *MsgHandler) Init(proto *net.Protocol) {}
 
-// QueryReceiveMsg returns a read-only reference to the receive channel.
-// Pointers to new Msg objects that have been received and decoded arrive
-// on this channel.
-func (this *MsgHandler) QueryReceiveMsg() <-chan *Msg {
-	return this.rcvChan
-}
-
-// ReceiveMsg is called by the chat protocol when raw data is received
+// DeserializeMsg is called by the chat protocol when raw data is received
 // on the line. New Msg objects, once built, are sent to the receive channel
 // which can be queried via QueryReceiveMsg().
-func (this *MsgHandler) ReceiveMsg(msg *net.Msg, access byte) error {
-	chatMsg := DeserializeMsg(msg.GetPayload())
-	if chatMsg == nil {
-		chatPerfs.Increment(PERF_CHAT_ERR_DESERIALIZE)
-		return net.ErrDeserializeFailed
-	}
+func (this *MsgHandler) DeserializeMsg(
+	msg    *net.Msg, 
+	access byte,
+) (interface{}, error) {
+	var err error
 
-	con := msg.Connection()
-	if con == nil {
-		chatPerfs.Increment(PERF_CHAT_ERR_CON_NIL)
-		return errConNil
-	}
+	cursor  := 0
+	data    := msg.GetPayload()
+	chatmsg := new(Msg)
 
-	chatMsg.Access = access
-	chatMsg.FromId = con.Id()
+	chatmsg.ChannelId, err = buffer.ReadUint32(data, &cursor)
+	if err != nil { return nil, err }
 
-	chatPerfs.Increment(PERF_CHAT_RCV)
+	chatmsg.From, err = buffer.ReadString(data, &cursor)
+	if err != nil { return nil, err }
+	
+	chatmsg.Subtype, err = buffer.ReadByte(data, &cursor)
+	if err != nil { return nil, err }
+		
+	chatmsg.Text, err = buffer.ReadString(data, &cursor)
+	if err != nil { return nil, err }
 
-	this.rcvChan<- chatMsg
+	chatmsg.FromId = msg.From()
+	chatmsg.Access = access
 
-	return nil
+	return chatmsg, nil
 }
 
-// SendMsg serializes a Msg object and sends it to the requested network
+// SerializeMsg serializes a Msg object and sends it to the requested network
 // ID.
-func (this *MsgHandler) SendMsg(targetId uint32, data interface{}) error {
-	msgObj := data.(*Msg)
+func (this *MsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
+	var cursor int = 0
 
-	if msgObj == nil {
-		chatPerfs.Increment(PERF_CHAT_ERR_BAD_OBJ)
-		return net.ErrInvalidType
+	chatMsg, ok := data.(*Msg)
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("Cannot serialize type %T", data))
 	}
 
-	dataBuffer := SerializeMsg(msgObj)
-	netMsg     := net.NewMsg()
-	netMsg.SetMsgType(this.Signature())
-	netMsg.SetPayload(dataBuffer)
-	netMsg.SetTimeout(CHAT_MSG_SEND_TIMEOUT_SEC)
+	dataLen := 
+		buffer.LenUint32()   		   +
+		buffer.LenString(chatMsg.From) +
+		buffer.LenByte() 			   +
+		buffer.LenString(chatMsg.Text)
 
-	chatPerfs.Increment(PERF_CHAT_SEND)
+	dataBuffer := make([]byte, dataLen)
 
-	return this.parent.SendMsg(targetId, netMsg)
+	buffer.WriteUint32(chatMsg.ChannelId, dataBuffer, &cursor)
+	buffer.WriteString(chatMsg.From, dataBuffer, &cursor)
+	buffer.WriteByte(chatMsg.Subtype, dataBuffer, &cursor)
+	buffer.WriteString(chatMsg.Text, dataBuffer, &cursor)
+
+	msg := new(net.Msg)
+	msg.SetTimeout(CHAT_MSG_SEND_TIMEOUT_SEC)
+	msg.SetMsgType(this.Signature())
+	msg.SetPayload(dataBuffer)
+
+	return msg, nil
 }
 
 // Signature returns CHAT_MSG.

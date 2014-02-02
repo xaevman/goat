@@ -31,9 +31,7 @@ func TestDefaultApp(t *testing.T) {
 	SetHeartbeat(1 * 1000)	// sec * ms
 	go waitForShutdown()
 
-	stopChan := make(chan bool, 0)
-	Start("DefaultApp", stopChan)
-
+	stopChan := Start("DefaultApp")
 	<-stopChan
 }
 
