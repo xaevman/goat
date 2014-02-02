@@ -10,16 +10,22 @@
 //
 //  -----------
 
+// Package lifecycle implements a simple helper object to make
+// synchronization of worker goroutines a little less verbose.
 package lifecycle
 
+// Stdlib imports.
 import (
 	"log"
 	"testing"
 	"time"
 )
 
+// Test objects.
 var syncObj *Lifecycle
 
+// TestLifecycleWithHeartbeat runs a work proces with heartbeat
+// enabled and makes sure no blocking or race conditions occur.
 func TestLifecycleWithHeartbeat(t *testing.T) {
 	log.Println("TestLifecycleWithHeartbeat: startup")
 	syncObj = New()
@@ -39,6 +45,8 @@ func TestLifecycleWithHeartbeat(t *testing.T) {
 	log.Println("TestLifecycleWithHeartbeat: passed")
 }
 
+// TestLifecycle runs a work process without heartbeat enabled
+// and makes sure no blocking or race conditions occur.
 func TestLifecycle(t *testing.T) {
 	log.Println("TestLifecycleSync: startup")
 	syncObj = New()
@@ -52,6 +60,8 @@ func TestLifecycle(t *testing.T) {
 	log.Println("TestLifecycleSync: passed")
 }
 
+// doWork is the async work process which runs in its own go routine
+// during the test.
 func doWork() {
 	for syncObj.QueryRun() {
 		select {

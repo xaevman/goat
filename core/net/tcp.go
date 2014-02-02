@@ -221,7 +221,7 @@ func (this *tcpCon) buildMsg(msgData []byte) []byte {
 	}
 
 	if this.nextMsg == nil {
-		this.nextMsg = NewMsg(this.id)
+		this.nextMsg = NewMsg()
 		this.nextMsg.SetConnection(this)
 	}
 

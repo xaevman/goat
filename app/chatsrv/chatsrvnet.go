@@ -36,8 +36,11 @@ type ChatSrv struct {
 	userMap     map[uint32]string
 }
 
+// Close perofrms no operations in ChatSrv.
 func (this *ChatSrv) Close() {}
 
+// Init creates the internal maps which track chat channels and user, and
+// also sets up chat message handler and server security handler.
 func (this *ChatSrv) Init(proto *net.Protocol) {
 	this.chanMap     = make(map[uint32]*net.BroadcastGroup, 0)
 	this.chanNameMap = make(map[string]*net.BroadcastGroup, 0)
@@ -48,19 +51,26 @@ func (this *ChatSrv) Init(proto *net.Protocol) {
 	proto.SetAccessProvider(new(net.NoSecurity))
 }
 
+// OnConnect logs debugging information about a newly connected client.
 func (this *ChatSrv) OnConnect(con net.Connection) {
 	log.Debug("OnConnect event: %s", con.RemoteAddr())
 }
 
+// OnDisconnect logs debugging information about a newly disconnected client
+// and also removes the client from relevant channels and maps.
 func (this *ChatSrv) OnDisconnect(con net.Connection) {
 	log.Debug("OnDisconnect event: %s", con.RemoteAddr())
 	this.handleDisco(con)
 }
 
+// OnError passes any errors from the network layer on to the logging system.
 func (this *ChatSrv) OnError(err error) {
 	log.Error(err.Error())
 }
 
+// OnReceive logs debugging information about incoming messages, performs
+// a type assertion on the incoming message object, and then passes it to
+// the message handler.
 func (this *ChatSrv) OnReceive(msg interface{}) {
 	log.Debug("%v", msg)
 
@@ -73,10 +83,13 @@ func (this *ChatSrv) OnReceive(msg interface{}) {
 	this.handleMsg(chatMsg)
 }
 
+// OnShutdown logs the shutdown event.
 func (this *ChatSrv) OnShutdown() {
 	log.Info("Shutdown signal received")
 }
 
+// OnTimeout logs the occurance of timeout events. It makes no attempts to
+// retry.
 func (this *ChatSrv) OnTimeout(timeout *net.TimeoutEvent) {
 	log.Error(
 		"Timeout [%d], msgType: %d", 
@@ -234,7 +247,7 @@ func (this *ChatSrv) handleSetName(msg *chat.Msg) {
 
 // send transmits a new message through the message processor.
 func (this *ChatSrv) send(toId uint32, msg *chat.Msg) {
-	this.proto.SendMsg(toId, products.CHAT_MSG, msg)
+	this.proto.SendMsg(toId, prod.CHAT_MSG, msg)
 }
 
 // sendJoinChanConfirm sends a message to the client to let it know that it has

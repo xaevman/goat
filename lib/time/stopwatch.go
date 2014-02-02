@@ -10,8 +10,6 @@
 //
 //  -----------
 
-// Package time implements helper functions and objects to assist in
-// measuring time-based tasks.
 package time
 
 // Stdlib imports.

@@ -10,9 +10,6 @@
 //
 //  -----------
 
-// Package dbg implements a protocol, server and client structure that can
-// be included in a goat project to enable realtime performance and diagnostic
-// monitoring over a TCP connection.
 package dbg
 
 // External imports.
@@ -21,6 +18,12 @@ import (
 	"github.com/xaevman/goat/lib/buffer"
 	"github.com/xaevman/goat/lib/perf"
 	"github.com/xaevman/goat/prod"
+)
+
+// Stdlib imports.
+import (
+	"errors"
+	"fmt"
 )
 
 // Perf counters.
@@ -47,9 +50,6 @@ var dbgPerfs = perf.NewCounterSet(
 	perfDbgNames,
 )
 
-// Network protocol object.
-var Protocol *net.Protocol
-
 
 // CmdMsg represents a command message being sent into the debugging
 // system. Access is the authorized level of access passed up from the
@@ -67,104 +67,61 @@ type CmdMsg struct {
 	Data   string
 }
 
-// Deserialize takes serialized data and creates a new CmdMsg object
-// from the data.
-func Deserialize(data []byte) *CmdMsg {
-	var cursor int = 0
 
-	var err error
-	msg := new(CmdMsg)
+// CmdMsgHandler is a net.MsgProcessor implementation which handles 
+// serialization for CmdMsg objects.
+type CmdMsgHandler struct {}
 
-	msg.Cmd, err = buffer.ReadString(data, &cursor)
-	if err != nil { return nil }
-
-	msg.Data, err = buffer.ReadString(data, &cursor)
-	if err != nil { return nil }
-
-	return msg
-}
-
-// Serialize converts a CmdMsg object into a serialized stream of bytes.
-func Serialize(msg *CmdMsg) []byte {
-	var cursor int = 0
-
-	dataLen := 
-		buffer.LenString(msg.Cmd) +
-		buffer.LenString(msg.Data)
-
-	data := make([]byte, dataLen)
-
-	buffer.WriteString(msg.Cmd, data, &cursor)
-	buffer.WriteString(msg.Data, data, &cursor)
-
-	return data
-}
-
-
-// CmdMsgHandler is a MsgProcessor implementation which handles network IO
-// for CmdMsg objects.
-type CmdMsgHandler struct {
-	parent  *net.Protocol
-	rcvChan chan *CmdMsg
-}
-
-// Close is unused in the CmdMsgHandler implementation.
+// Close performs no actions in CmdMsgHandler.
 func (this *CmdMsgHandler) Close() {}
 
-// Init saves a reference to the parent protocol and initializes the
-// receive channel.
-func (this *CmdMsgHandler) Init(proto *net.Protocol) {
-	this.parent  = proto
-	this.rcvChan = make(chan *CmdMsg, 0)
+// Init performs no actions in CmdMsgHandler.
+func (this *CmdMsgHandler) Init(proto *net.Protocol) {}
+
+// DeserializeMsg is called by the parent protocol when raw message data is
+// received from the network module.
+func (this *CmdMsgHandler) DeserializeMsg(msg *net.Msg, access byte) (interface{}, error)  {
+	var err error
+
+	cursor := 0
+	data   := msg.GetPayload()
+	cmdmsg := new(CmdMsg)
+
+	cmdmsg.Cmd, err = buffer.ReadString(data, &cursor)
+	if err != nil { return nil, err }
+
+	cmdmsg.Data, err = buffer.ReadString(data, &cursor)
+	if err != nil { return nil, err }
+
+	cmdmsg.Access = access
+
+	return cmdmsg, nil
 }
 
-// QueryReceiveMsg returns a read-only reference to the channel on which
-// newly received CmdMsg objects have arrived.
-func (this *CmdMsgHandler) QueryReceiveMsg() <-chan *CmdMsg {
-	return this.rcvChan
-}
-
-// ReceiveMsg is called by the parent protocol when raw message data is
-// received from the network module. User code should not call ReceiveMsg
-// directly. Instead, integrate QueryReceiveMsg() into your IO loop to
-// receive encoded CmdMsg objects as they are received.
-func (this *CmdMsgHandler) ReceiveMsg(msg *net.Msg, access byte) error {
-	cmdMsg := Deserialize(msg.GetPayload())
-	if cmdMsg == nil {
-		dbgPerfs.Increment(PERF_DBG_ERR_DESERIALIZE)
-		return net.ErrDeserializeFailed
+// SerializeMsg serializes a CmdMsg object.
+func (this *CmdMsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
+	cursor     := 0
+	cmdmsg, ok := data.(*CmdMsg)
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("Cannot serialize type %T", data))
 	}
 
-	cmdMsg.Access = access
+	dataLen := 
+		buffer.LenString(cmdmsg.Cmd) +
+		buffer.LenString(cmdmsg.Data)
 
-	dbgPerfs.Increment(PERF_DBG_RCV)
+	dataBuffer := make([]byte, dataLen)
 
-	this.rcvChan<- cmdMsg
+	buffer.WriteString(cmdmsg.Cmd, dataBuffer, &cursor)
+	buffer.WriteString(cmdmsg.Data, dataBuffer, &cursor)
 
-	return nil
-}
+	msg := net.NewMsg()
+	msg.SetMsgType(this.Signature())
+	msg.SetPayload(dataBuffer)
 
-// SendMsg takes CmdMsg objects, serializes them and sends them through to
-// the network layer for transmission.
-func (this *CmdMsgHandler) SendMsg(targetId uint32, data interface{}) error {
-	sendMsg := data.(*CmdMsg)
-
-	if sendMsg == nil {
-		dbgPerfs.Increment(PERF_DBG_ERR_BAD_OBJ)
-		return net.ErrInvalidType
-	}
-
-	dataBuffer := Serialize(sendMsg)
-	netMsg     := net.NewMsg()
-	netMsg.SetMsgType(this.Signature())
-	netMsg.SetPayload(dataBuffer)
-
-	dbgPerfs.Increment(PERF_DBG_SEND)
-
-	return this.parent.SendMsg(targetId, netMsg)
+	return msg, nil
 }
 
 func (this *CmdMsgHandler) Signature() uint16 {
-	return products.DBG_MSG
+	return prod.DBG_MSG
 }
-

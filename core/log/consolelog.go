@@ -12,6 +12,7 @@
 
 package log
 
+// Stdlib imports.
 import (
     "fmt"
 )

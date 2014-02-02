@@ -29,11 +29,18 @@ import(
 // ChatSrvStart is a goapp.AppStarter implementation for a ChatSrv
 // instance.
 type ChatSrvStart struct {}
+
+// PreInit registers an ini config provider and queries the config
+// system to determine if debug logs should be enabled during this
+// run.
 func (this *ChatSrvStart) PreInit() {
-	config.InitIniProvider("chat.ini", 1)
+	config.InitIniProvider("config/chat.ini", 1)
 	debugLogs, _ := config.GetBoolVal("System.DebugLogs", 0, false)
 	log.DebugLogs = debugLogs
 }
+
+// PostInit queries the config system to determine which bind address
+// the server should listen on.
 func (this *ChatSrvStart) PostInit() {
 	addr, _ := config.GetVal("Net.SrvAddr", 0, DEFAULT_ADDR)
 	proto.ListenTcp(addr)
@@ -43,6 +50,9 @@ func (this *ChatSrvStart) PostInit() {
 // ChatSrvLoop is a goapp.LoopHandler implementation for a ChatSrv
 // instance.
 type ChatSrvLoop struct {}
+
+// OnHeartbeat queries the perf system for basic rx/tx stats and
+// prints their rates to the console.
 func (this *ChatSrvLoop) OnHeartbeat() {
 	chatCounters := perf.GetCounterSet("Module.Net.Proto.ChatSrv")
 	rx           := chatCounters.Get(net.PERF_PROTO_RCV_OK)
@@ -56,5 +66,9 @@ func (this *ChatSrvLoop) OnHeartbeat() {
 
 	log.Info(perfStr)
 }
+
+// PreLoop is unused in ChatSrvLoop.
 func (this *ChatSrvLoop) PreLoop() {}
+
+// PostLoop is unused in ChatSrvLoop.
 func (this *ChatSrvLoop) PostLoop() {}

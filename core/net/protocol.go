@@ -109,8 +109,7 @@ func perfName(baseName string) string {
 
 
 // NewProtocol is a helper constructor function which creates a newly initialized
-// Protocol object, registers it with the net service, and returns a pointer to it
-// for use.
+// Protocol object and returns a pointer to it for use.
 func NewProtocol(pName string, evtHandler EventHandler) *Protocol {
 	newProto := Protocol{
 		cliMap      : make(map[uint32]Connection, 0),
@@ -163,8 +162,8 @@ type Protocol struct {
 	timeoutChan chan *TimeoutEvent
 }
 
-// AddSig registers a message type signature and its associated message processing
-// object with this protocol.
+// AddSignature registers a message type signature and its associated message 
+// processing object with this protocol.
 func (this *Protocol) AddSignature(proc MsgProcessor) {
 	if proc == nil {
 		return
@@ -192,8 +191,8 @@ func (this *Protocol) AddSignature(proc MsgProcessor) {
 	)
 }
 
-// DeleteSig removes a message type signature and its associated message processing
-// object if one exists.
+// DeleteSignature removes a message type signature and its associated message 
+// processing object if one exists.
 func (this *Protocol) DeleteSignature(proc MsgProcessor) {
 	if proc == nil {
 		return
@@ -242,7 +241,7 @@ func (this *Protocol) DialTcp(addr string) error {
 	return err
 }
 
-// GetAllConnections returns a slice containing ll connections associated
+// GetAllConnections returns a slice containing all connections associated
 // with the protocol object.
 func (this *Protocol) GetAllConnections() []Connection {
 	this.cliMutex.RLock()
@@ -463,22 +462,20 @@ func (this *Protocol) onDisconnect(con Connection) {
 
 // onError is called when error events occur within the protocol.
 // onError attempts to feed the registered EventHandler with the
-// given data, and itself times out and logs an error after
-// DEFAULT_EVT_TIMEOUT_SEC.
+// given err data.
 func (this *Protocol) onError(err error) {
 	this.evtHandler.OnError(err)
 }
 
-// onRcv is called when a data receive is completed within the protocol.
-// onRcv attempts to feed the registered EventHandler with the given data,
-// and itself times out and logs an error after DEFAULT_EVT_TIMEOUT_SEC.
+// onRcv is called when a data receive is completed on underlying NetConnections
+// and sends the received message through the receive pipeline.
 func (this *Protocol) onRcv(msg *Msg) {
 	this.rcvMsg(msg)
 }
 
-// onTimeout is called when a timeout event bubbles up from the network layer.
-// onTimeout attempts to feed the registered EventHandler with the given timeout
-// event, and itself times out and logs an error after DEFUALT_EVT_TIMEOUT_SEC.
+// onTimeout is called when a timeout event bubbles up from underlying
+// NetConnections. onTimeout logs the type of timeout and then bubbles
+// the event up to the registered event handler.
 func (this *Protocol) onTimeout(timeout *TimeoutEvent) {
 	switch timeout.TimeoutType {
 	case TIMEOUT_CONNECT:
@@ -496,12 +493,16 @@ func (this *Protocol) onTimeout(timeout *TimeoutEvent) {
 	this.evtHandler.OnTimeout(timeout)
 }
 
-// rcvMsg is the message pipeline for incoming messages. First, the protocol
-// is checked to see if a message processor is registered. Next, the registered
-// AccessProvider is queried to make sure the message is allowed to pass. Then,
-// the message is passed through registered Decryption and Decompression
-// processes if registered and necessary. Finally, the pre-processed message is
-// passed to the message processor for final processing.
+// rcvMsg is the message pipeline for incoming messages. First, the message
+// CRC is validated. Second, the msg is checked for a valid reference to a live
+// NetConnection object. Next, the registered AccessProvider is queried to make 
+// sure the message is allowed to pass. Then, the header is cracked open and
+// message signature retreived. The header is checked against registered signatures
+// and the appropriate MsgHandler retreived. Next, the message is passed through 
+// registered Decryption and Decompression processes if registered and necessary. 
+// Finally, the pre-processed message is passed to the message processor for
+// deserialization. If all of the steps in the pipeline complete successfully, the 
+// completed message is passed to the registered EventHandler.
 func (this *Protocol) rcvMsg(msg *Msg) {
 	defer this.perfs.Increment(PERF_PROTO_RCV_TOTAL)
 
@@ -602,11 +603,17 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 
 	this.evtHandler.OnReceive(obj)
 
+	this.perfs.Increment(PERF_PROTO_RCV_OK)
 	this.perfs.Add(PERF_PROTO_RCV_BYTES, dataLen)
 }
 
 // sendMsg distributes the given msg to a registerd client with that id,
-// if one exists.
+// if one exists. First, the send pipeline validates the targeted netID.
+// Second, the desired signature is checked against registered signatures and
+// the appropriate MsgProcessor retrieved. Next, the message is passed through
+// registered Compression and Encryption providers, if registered. Finally,
+// if the message passes through the pipeline without error, it is sent via the
+// requested net id.
 func (this *Protocol) sendMsg(id uint32, sig uint16, obj interface{}) error {
 	defer this.perfs.Increment(PERF_PROTO_SEND_TOTAL)
 

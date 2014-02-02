@@ -10,7 +10,6 @@
 //
 //  -----------
 
-// Package log implements a standard, multi-channel logging interface.
 package log
 
 // External imports.

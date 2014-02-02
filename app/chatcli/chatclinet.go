@@ -56,7 +56,7 @@ var (
 )
 
 
-// ChatCli is an implementation of of net.EventHandler which implements
+// ChatCli is a net.EventHandler implementation which runs
 // a simple console-based chat client.
 type ChatCli struct {
 	chanIdMap   map[uint32]string
@@ -68,12 +68,18 @@ type ChatCli struct {
 	username    string
 }
 
+// Close shuts down the console system and starts the application
+// layer shutdown process.
 func (this *ChatCli) Close() {
 	this.inputSync.Shutdown()
 	console.Write(console.ENABLE_LINEWRAP)
 	goapp.Stop()
 }
 
+// Init creates the internal map which tracks channel names,
+// initializes the chat message handler and disables network security
+// for the chat protocol. Finally, it starts the console input handler
+// in a separate go routine.
 func (this *ChatCli) Init(proto *net.Protocol) {
 	this.chanIdMap   = make(map[uint32]string, 0)
 	this.chanNameMap = make(map[string]uint32, 0)
@@ -87,7 +93,8 @@ func (this *ChatCli) Init(proto *net.Protocol) {
 	go this.startInput()
 }
 
-// OnConnect is called when the connection is established with the server.
+// OnConnect stores the netID of the server connection, initializes
+// the console, and sends the initial connect message to the server.
 func (this *ChatCli) OnConnect(con net.Connection) {
 	this.srvId = con.Id()
 
@@ -102,7 +109,10 @@ func (this *ChatCli) OnConnect(con net.Connection) {
 	this.sendConnect()
 }
 
-// OnDisconnect is called when the connection to the server is dropped.
+// OnDisconnect starts the protocol shutdown process in a separate go
+// routine. Since OnDisconnect is called from the protocol event system
+// we have to call shutdown on the protocol in a non-blocking manner 
+// (OnDisconnect must return before protocol.Shutdown can proceed).
 func (this *ChatCli) OnDisconnect(con net.Connection) {
 	go func() {
 		this.proto.Shutdown()
@@ -115,13 +125,15 @@ func (this *ChatCli) OnDisconnect(con net.Connection) {
 	}()
 }
 
-
+// OnError forwards errors received from the network layer on to the
+// log system.
 func (this *ChatCli) OnError(err error) {
 	log.Error(err.Error())
 }
 
-// OnMsg distributes chat messages received from the server to thier
-// appropriate message handler.
+// OnReceive performs a type assertion on incoming messages, and then
+// dispatches them by sub-type to the appropriate message handling
+// functions.
 func (this *ChatCli) OnReceive(msg interface{}) {
 	chatMsg, ok := msg.(*chat.Msg)
 	if !ok {
@@ -145,12 +157,11 @@ func (this *ChatCli) OnReceive(msg interface{}) {
 	}
 }
 
-// OnShutdown is called when Shutdown() is called on the underlying
-// ChatCli.
+// OnShutdown is unused in ChatCli.
 func (this *ChatCli) OnShutdown() {}
 
-// OnTimeout is called when a TCP timeout event bubbles up from the
-// net service.
+// OnTimeout passes timeout events on to the logging system. It makes
+// no attempts to retry.
 func (this *ChatCli) OnTimeout(timeout *net.TimeoutEvent) {
 	log.Error("%+v", timeout)
 }
@@ -285,12 +296,12 @@ func (this *ChatCli) printTextFromInput(txt string, style console.Style) {
 	console.WriteLineFmt(txt, style)
 }
 
-// send transmits a Msg object to the server.
+// send transmits a chat.Msg object to the server.
 func (this *ChatCli) send(msg *chat.Msg) {
-	this.proto.SendMsg(this.srvId, products.CHAT_MSG, msg)
+	this.proto.SendMsg(this.srvId, prod.CHAT_MSG, msg)
 }
 
-// SendChat sends a chat message to the server.
+// sendChat sends a chat message to the server.
 func (this *ChatCli) sendChat(channel uint32, text string) {
 	conMsg          := new(chat.Msg)
 	conMsg.ChannelId = channel
@@ -301,7 +312,7 @@ func (this *ChatCli) sendChat(channel uint32, text string) {
 	this.send(conMsg)
 }
 
-// SendConnect sends the initial connection message to the server.
+// sendConnect sends the initial connection message to the server.
 func (this *ChatCli) sendConnect() {
 	conMsg        := new(chat.Msg)
 	conMsg.From    = this.username
@@ -310,7 +321,7 @@ func (this *ChatCli) sendConnect() {
 	this.send(conMsg)
 }
 
-// SendJoinChannel sends a join channel request to the server.
+// sendJoinChannel sends a join channel request to the server.
 func (this *ChatCli) sendJoinChannel(channelName string) {
 	joinMsg        := new(chat.Msg)
 	joinMsg.Subtype = chat.MSG_SUB_JOIN_CHANNEL
@@ -328,7 +339,8 @@ func (this *ChatCli) sendSetName() {
 	this.send(conMsg)
 }
 
-
+// startInput starts the console input loop, reading text from
+// stdin.
 func (this *ChatCli) startInput() {
 	inChan := console.ReadInput(EXIT_MSG)
 
@@ -342,4 +354,3 @@ func (this *ChatCli) startInput() {
 
 	this.inputSync.ShutdownComplete()
 }
-

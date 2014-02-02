@@ -12,6 +12,7 @@
 
 package diag
 
+// Stdlib imports.
 import (
 	"bytes"
 	"fmt"

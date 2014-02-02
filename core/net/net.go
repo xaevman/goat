@@ -10,23 +10,6 @@
 //
 //  -----------
 
-// Package net provides abstractions for TCP servers and clients
-// which handle massively parallel IO and present a unified interface
-// for implementing security and messaging protocols on top of them.
-//
-// Network message (max length 32KB)
-//		flags
-//			11: compressed
-//			12: encrypted
-//			13: reserved
-//			14: reserved
-//			15: reserved
-//			16: reserved
-//
-// [0-1]     msgtype (bits 1-10 for 1024 unique msg types), flags (bits 11-16)
-// [2-3]     msgsize (uint16)
-// [4-7]	 crc32 checksum of payload (uint32)
-// [8-32767] payload is msg size
 package net
 
 // Stdlib imports.
@@ -129,8 +112,8 @@ type CryptoProvider interface {
 // to define the serialization behavior of a given message signature.
 type MsgProcessor interface {
 	Close()
-	Init(proto *Protocol)
 	DeserializeMsg(msg *Msg, access byte) (interface{}, error)
+	Init(proto *Protocol)
 	SerializeMsg(data interface{}) (*Msg, error)
 	Signature() uint16
 }
@@ -150,10 +133,10 @@ type EventHandler interface {
 	Init(proto *Protocol)
 	OnConnect(con Connection)
 	OnDisconnect(con Connection)
-	OnTimeout(timeout *TimeoutEvent)
-	OnReceive(msg interface{})
 	OnError(err error)
+	OnReceive(msg interface{})
 	OnShutdown()
+	OnTimeout(timeout *TimeoutEvent)
 }
 
 // GetMsgCompressedFlag retrieves bit 11 of the message header, which is used

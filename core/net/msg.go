@@ -18,6 +18,21 @@ import (
 )
 
 
+// NewMsg initializes a new Msg object and returns a pointer to it for use.
+func NewMsg() *Msg {
+	newMsg := Msg {
+		con        : nil,
+		cursor     : 0,
+		data       : nil,
+		from       : 0,
+		header     : 0,
+		hdrBuffer  : make([]byte, HEADER_LEN_B),
+		timeoutSec : DEFAULT_MSG_TIMEOUT_SEC,
+	}
+
+	return &newMsg
+}
+
 // Msg represents the baseline structure of data used for packaging
 // network messages to be sent via the net service.
 type Msg struct {	
@@ -28,21 +43,6 @@ type Msg struct {
 	hdrBuffer  []byte
 	header     uint64
 	timeoutSec int
-}
-
-// NewMsg initializes a new Msg object and returns a pointer to it for use.
-func NewMsg(fromId uint32) *Msg {
-	newMsg := Msg {
-		con        : nil,
-		cursor     : 0,
-		data       : nil,
-		from       : fromId,
-		header     : 0,
-		hdrBuffer  : make([]byte, HEADER_LEN_B),
-		timeoutSec : DEFAULT_MSG_TIMEOUT_SEC,
-	}
-
-	return &newMsg
 }
 
 // Connection returns the Connection object (if any) associated with this
@@ -86,7 +86,8 @@ func (this *Msg) Len() int {
 
 // SetConnection sets the connection associated with this msg.
 func (this *Msg) SetConnection(parentCon Connection) {
-	this.con = parentCon
+	this.con  = parentCon
+	this.from = parentCon.Id()
 }
 
 // SetCompressed sets the compressed flag in this message's header.

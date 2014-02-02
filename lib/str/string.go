@@ -10,10 +10,9 @@
 //
 //  -----------
 
-// Package str contains helper functions for commonly useful string
-// operations.
 package str
 
+// Stdlib imports.
 import (
 	"bytes"
 	"strconv"

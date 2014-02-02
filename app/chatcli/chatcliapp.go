@@ -22,9 +22,12 @@ import (
 	"os"
 )
 
-// ConsoleCliStart goapp.AppStarter implementation which runs a 
+// ConsoleCliStart is a goapp.AppStarter implementation which runs a
 // ConsoleCli based ChatCli instance.
 type ConsoleCliStart struct {}
+
+// PreInit parses command line arguments to set the target server
+// address and start-up username.
 func (this *ConsoleCliStart) PreInit() {
 	if len(os.Args) > 1 {
 		srvAddr = os.Args[1]
@@ -33,6 +36,9 @@ func (this *ConsoleCliStart) PreInit() {
 		chatCli.username = os.Args[2]
 	}
 }
+
+// PostInit connects to the remote server, closing the application if
+// a connection cannot be established.
 func (this *ConsoleCliStart) PostInit() {
 	err := proto.DialTcp(srvAddr)	
 	if err != nil {

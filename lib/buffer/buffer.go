@@ -10,8 +10,6 @@
 //
 //  -----------
 
-// Package buffer contains helper functions for writing and reading basic
-// types into and out of byte slices.
 package buffer
 
 // Stdlib imports.

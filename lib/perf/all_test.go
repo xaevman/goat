@@ -10,18 +10,19 @@
 //
 //  -----------
 
+// Package perf exposes a centralized API for storing, tracking, and querying
+// performance data for a Go application.
 package perf
-
-import (
-	"github.com/xaevman/goat/lib/str"
-)
 
 // Stdlib imports.
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -212,7 +213,7 @@ func TestStats(t *testing.T) {
 			fmt.Printf(
 				"\n========\nset %v :: %v\n",
 				resCounter,
-				str.Int64ArrayToList(statSeries[min:i + 1], ","),
+				arrayToList(statSeries[min:i + 1], ","),
 			)
 
 			printStats(i, s)
@@ -257,6 +258,21 @@ func TestStats(t *testing.T) {
 
 	fmt.Println("*** Perf snapshot ***")
 	fmt.Println(TakeSnapshot())
+}
+
+// arrayToList takes an array of int64s and transforms them into a 
+// single string, delimited by a specified separator.
+func arrayToList(items []int64, sep string) string {
+	var buffer bytes.Buffer
+
+	for i, v := range items {
+		buffer.WriteString(strings.TrimSpace(strconv.FormatInt(v, 10)))
+		if i < len(items) - 1 {
+			buffer.WriteString(sep)
+		}
+	}
+
+	return buffer.String()
 }
 
 // clamp clamps a given int value to be between the supplied

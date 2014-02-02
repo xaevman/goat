@@ -10,13 +10,32 @@
 //
 //  -----------
 
+// Package net provides abstractions for TCP servers and clients
+// which handle massively parallel IO and present a unified interface
+// for implementing security and messaging protocols on top of them.
+//
+// Network message (max length 32KB)
+//		flags
+//			11: compressed
+//			12: encrypted
+//			13: reserved
+//			14: reserved
+//			15: reserved
+//			16: reserved
+//
+// [0-1]     msgtype (bits 1-10 for 1024 unique msg types), flags (bits 11-16)
+// [2-3]     msgsize (uint16)
+// [4-7]	 crc32 checksum of payload (uint32)
+// [8-32767] payload is msg size
 package net
 
+// External imports.
 import (
 	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/lib/str"
 )
 
+// Stdlib imports.
 import (
 	"errors"
 	"hash/crc32"
@@ -47,39 +66,48 @@ var (
 	srvAddr     = "127.0.0.1:8900"
 )
 
-// Test message format
+// PPMsg represents a "ping" or "pong" network message.
 type PPMsg struct {
 	sender     uint32
 	senderAddr string
 	msgType    string
 }
 
-// Test EventHandler
+// PPEventHandler is a net.EventHandler implementation for the
+// net protocol tests.
 type PPEventHandler struct {
 	parent *Protocol
 	t      *testing.T
 }
 
+// Close performs no action for PPEventHandlers.
 func (this *PPEventHandler) Close() {}
 
+// Init saves a reference to the given protocol for future use.
 func (this *PPEventHandler) Init(proto *Protocol) {
 	this.parent = proto
 }
 
+// OnConnect logs information about the new connection.
 func (this *PPEventHandler) OnConnect(con Connection) {
 	log.Info("Connect (%s): %s", this.parent.name, con.RemoteAddr())
 }
 
+// OnDisconnect logs information about the newly disconnected connection
+// object.
 func (this *PPEventHandler) OnDisconnect(con Connection) {
 	log.Info("Disconnect (%s): %s", this.parent.name, con.RemoteAddr())
 }
 
+// OnTimeout fails the test.
 func (this *PPEventHandler) OnTimeout(timeout *TimeoutEvent) {
 	this.t.Fatalf("Timeout: %+v", timeout)
 }
 
+// OnReceive performs a type assertion on the incoming message, logs
+// the message, and - if the received message was a ping - returns a
+// pong message back to the sender.
 func (this *PPEventHandler) OnReceive(msg interface{}) {
-	// type switch
 	pingMsg, ok := msg.(*PPMsg)
 	if !ok {
 	    this.t.Fatalf("unexpected type %T", msg)
@@ -96,26 +124,32 @@ func (this *PPEventHandler) OnReceive(msg interface{}) {
 	this.parent.SendMsg(pingMsg.sender, PONG_MSG_TYPE, pingMsg)
 }
 
+// OnError fails the test.
 func (this *PPEventHandler) OnError(err error) {
 	this.t.Fatal(err)
 }
 
+// OnShutdown logs the shutdown event.
 func (this *PPEventHandler) OnShutdown() {
 	log.Info("Shutting down %s", this.parent.name)
 }
 
 
-// Ping message processor
+// PingMsgProc is the message processor which handles serialization
+// for ping messages.
 type PingMsgProc struct {
 	parent *Protocol
 }
 
+// Close performs no action in PingMsgProc.
 func (this *PingMsgProc) Close() {}
 
+// Init saves a reference to the parent protocol.
 func (this *PingMsgProc) Init(proto *Protocol) {
 	this.parent = proto
 }
 
+// DeserializeMsg turns a received net.Msg into a new PPMsg object.
 func (this *PingMsgProc) DeserializeMsg(
 	msg    *Msg, 
 	access byte,
@@ -128,6 +162,8 @@ func (this *PingMsgProc) DeserializeMsg(
 	return pingMsg, nil
 }
 
+// SerializeMsg takes a given PPMsg ping message and turns it into a
+// net.Msg for transmission.
 func (this *PingMsgProc) SerializeMsg(data interface{}) (*Msg, error) {
 	ppMsg, ok := data.(*PPMsg)
 	if !ok {
@@ -143,22 +179,27 @@ func (this *PingMsgProc) SerializeMsg(data interface{}) (*Msg, error) {
 	return msg, nil
 }
 
+// Signature returns PING_MSG_TYPE.
 func (this *PingMsgProc) Signature() uint16 {
 	return PING_MSG_TYPE
 }
 
 
-// Pong message processor
+// PongMsgProc is the message processor which handles serialization
+// for pong messages.
 type PongMsgProc struct {
 	parent *Protocol
 }
 
+// Close performs no actions in PongMsgProc.
 func (this *PongMsgProc) Close() {}
 
+// Init stores a reference to the parent protocol.
 func (this *PongMsgProc) Init(proto *Protocol) {
 	this.parent = proto
 }
 
+// DeserializeMsg turns a received net.Msg into a new PPMsg object.
 func (this *PongMsgProc) DeserializeMsg(
 	msg    *Msg, 
 	access byte,
@@ -171,6 +212,8 @@ func (this *PongMsgProc) DeserializeMsg(
 	return pingMsg, nil
 }
 
+// SerializeMsg takes a given PPMsg pong message and turns it into a
+// net.Msg for transmission.
 func (this *PongMsgProc) SerializeMsg(data interface{}) (*Msg, error) {
 	ppMsg, ok := data.(*PPMsg)
 	if !ok {
@@ -186,6 +229,7 @@ func (this *PongMsgProc) SerializeMsg(data interface{}) (*Msg, error) {
 	return msg, nil
 }
 
+// Signature returns PONG_MSG_TYPE.
 func (this *PongMsgProc) Signature() uint16 {
 	return PONG_MSG_TYPE
 }
@@ -200,6 +244,8 @@ func TestHeaderOps(t *testing.T) {
 }
 
 // TestTCPSrv tests the TCPSrv class with a simple text messaging protocol.
+// Tests are performed with a variety of client counts and total message 
+// counts.
 func TestTCPSrv(t *testing.T) {
 	log.Info("")
 

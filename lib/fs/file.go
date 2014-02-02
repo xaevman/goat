@@ -12,6 +12,7 @@
 
 package fs
 
+// Stdlib imports.
 import (
 	"path/filepath"
 	"os"

@@ -10,13 +10,20 @@
 //
 //  -----------
 
+// Package config presents a unified, hierarchical interface for retreiving
+// configuration options from any registered providers. The package includes
+// builtin providers for retrieving config settings from the environment and
+// ini formatted config files.
 package config
 
+// Stdlib imports.
 import(
 	"log"
 	"testing"
 )
 
+// TestConfig initializes a couple of ini providers and
+// attempts to pull values back out of them.
 func TestConfig(t *testing.T) {
 	IniDir = "./"
 
@@ -38,6 +45,7 @@ func TestConfig(t *testing.T) {
 	printConfig(key, data, entry.Parser())
 }
 
+//printConfig prints the value data retreived from the config system.
 func printConfig(key string, vals []string, parser ConfigProvider) {
 	if vals == nil {
 		return

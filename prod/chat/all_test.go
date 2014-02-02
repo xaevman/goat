@@ -10,12 +10,13 @@
 //
 //  -----------
 
+
+// Package chat defines the various message handlers and network objects used
+// in the test chat server and client applications.
 package chat
 
-// External imports.
-import (
-
-)
+// Products import.
+import "github.com/xaevman/goat/prod"
 
 // Stdlib imports.
 import (
@@ -23,19 +24,31 @@ import (
 	"testing"
 )
 
-// TestMsg tests serialization/deserialization of Msg objects.
-func TestMsgSerialize(t *testing.T) {
+// TestMsgSig tests to make sure that the message handler returns
+// the expected message signature.
+func TestMsgSig(t *testing.T) {
 	handler := new(MsgHandler)
-	cm      := Msg {
-		ChannelId: 10,
-		From:      "Jared",
-		FromId:    12345,
-		Subtype:   MSG_SUB_CHAT,
-		ToId:      54321,
-		Text:      "This is my test message! Rawr",
+	if handler.Signature() != prod.CHAT_MSG {
+		t.Fatalf(
+			"Signature mismatch (%d vs %d)", 
+			handler.Signature(), 
+			prod.CHAT_MSG,
+		)
 	}
 
-	b, err := handler.SerializeMsg(&cm)
+	log.Println("TestMsgSig: passed")
+}
+
+// TestMsgSerialize tests serialization/deserialization of Msg objects.
+func TestMsgSerialize(t *testing.T) {
+	handler     := new(MsgHandler)
+	cm          := new(Msg)
+	cm.ChannelId = 10
+	cm.From      = "Jared"
+	cm.Subtype   = MSG_SUB_CHAT
+	cm.Text      = "This is my test message! Rawr"
+
+	b, err := handler.SerializeMsg(cm)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,27 +79,11 @@ func TestMsgSerialize(t *testing.T) {
 		)
 	}
 
-	if cm.FromId != newCm.FromId {
-		t.Fatalf(
-			"From Ids do not match: %v != %v\n",
-			cm.FromId,
-			newCm.FromId,
-		)
-	}
-
 	if cm.Subtype != newCm.Subtype {
 		t.Fatalf(
 			"Subtype mismatch: %v != %v\n",
 			cm.Subtype,
 			newCm.Subtype,
-		)
-	}
-
-	if cm.ToId != newCm.ToId {
-		t.Fatalf(
-			"To Ids do not match: %v != %v\n",
-			cm.ToId,
-			newCm.ToId,
 		)
 	}
 

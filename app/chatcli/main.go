@@ -18,26 +18,24 @@ import (
 	"github.com/xaevman/goat/core/net"
 )
 
-
+// Application name.
 const APP_NAME = "ChatCli"
 
-
-
-// Configurables.
+// Config options.
 var (
 	srvAddr  = "127.0.0.1:8900"
 	userName = "Anon"
 )
 
-// ChatSrv protocol instance.
-var chatCli = new(ChatCli)
-var proto   = net.NewProtocol(APP_NAME, chatCli)
-
+// ChatCli protocol instance and event handler.
+var (
+	chatCli = new(ChatCli)
+	proto   = net.NewProtocol(APP_NAME, chatCli)
+)
 
 // main is the application entry point.
 func main() {
 	goapp.SetAppStarter(new(ConsoleCliStart))
-	goapp.SetHeartbeat(1000)
 
 	stopChan := goapp.Start(APP_NAME)
 	<-stopChan

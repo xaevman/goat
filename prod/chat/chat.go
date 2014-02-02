@@ -10,15 +10,13 @@
 //
 //  -----------
 
-// Package chat defines the various message handlers and network objects used
-// in the test chat server and client applications.
 package chat
 
 // External imports.
 import (
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/buffer"
-	"github.com/xaevman/goat/prod"	
+	"github.com/xaevman/goat/prod"
 )
 
 // Stdlin imports.
@@ -77,12 +75,8 @@ func (this *MsgHandler) Close() {}
 func (this *MsgHandler) Init(proto *net.Protocol) {}
 
 // DeserializeMsg is called by the chat protocol when raw data is received
-// on the line. New Msg objects, once built, are sent to the receive channel
-// which can be queried via QueryReceiveMsg().
-func (this *MsgHandler) DeserializeMsg(
-	msg    *net.Msg, 
-	access byte,
-) (interface{}, error) {
+// on the line.
+func (this *MsgHandler) DeserializeMsg(msg *net.Msg, access byte) (interface{}, error) {
 	var err error
 
 	cursor  := 0
@@ -107,11 +101,9 @@ func (this *MsgHandler) DeserializeMsg(
 	return chatmsg, nil
 }
 
-// SerializeMsg serializes a Msg object and sends it to the requested network
-// ID.
+// SerializeMsg serializes a Msg object.
 func (this *MsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
-	var cursor int = 0
-
+	cursor      := 0
 	chatMsg, ok := data.(*Msg)
 	if !ok {
 		return nil, errors.New(fmt.Sprintf("Cannot serialize type %T", data))
@@ -130,7 +122,7 @@ func (this *MsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
 	buffer.WriteByte(chatMsg.Subtype, dataBuffer, &cursor)
 	buffer.WriteString(chatMsg.Text, dataBuffer, &cursor)
 
-	msg := new(net.Msg)
+	msg := net.NewMsg()
 	msg.SetTimeout(CHAT_MSG_SEND_TIMEOUT_SEC)
 	msg.SetMsgType(this.Signature())
 	msg.SetPayload(dataBuffer)
@@ -140,5 +132,5 @@ func (this *MsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
 
 // Signature returns CHAT_MSG.
 func (this *MsgHandler) Signature() uint16 {
-	return products.CHAT_MSG
+	return prod.CHAT_MSG
 }
