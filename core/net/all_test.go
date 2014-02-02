@@ -76,31 +76,47 @@ type PPMsg struct {
 // PPEventHandler is a net.EventHandler implementation for the
 // net protocol tests.
 type PPEventHandler struct {
-	parent *Protocol
-	t      *testing.T
+	initialized bool
+	parent     *Protocol
+	t          *testing.T
 }
 
 // Close performs no action for PPEventHandlers.
-func (this *PPEventHandler) Close() {}
+func (this *PPEventHandler) Close() {
+	this.initialized = false
+}
 
 // Init saves a reference to the given protocol for future use.
 func (this *PPEventHandler) Init(proto *Protocol) {
-	this.parent = proto
+	this.parent      = proto
+	this.initialized = true
 }
 
 // OnConnect logs information about the new connection.
 func (this *PPEventHandler) OnConnect(con Connection) {
+	if !this.initialized {
+		return
+	}
+
 	log.Info("Connect (%s): %s", this.parent.name, con.RemoteAddr())
 }
 
 // OnDisconnect logs information about the newly disconnected connection
 // object.
 func (this *PPEventHandler) OnDisconnect(con Connection) {
+	if !this.initialized {
+		return
+	}
+
 	log.Info("Disconnect (%s): %s", this.parent.name, con.RemoteAddr())
 }
 
 // OnTimeout fails the test.
 func (this *PPEventHandler) OnTimeout(timeout *TimeoutEvent) {
+	if !this.initialized {
+		return
+	}
+
 	this.t.Fatalf("Timeout: %+v", timeout)
 }
 
@@ -108,6 +124,10 @@ func (this *PPEventHandler) OnTimeout(timeout *TimeoutEvent) {
 // the message, and - if the received message was a ping - returns a
 // pong message back to the sender.
 func (this *PPEventHandler) OnReceive(msg interface{}) {
+	if !this.initialized {
+		return
+	}
+
 	pingMsg, ok := msg.(*PPMsg)
 	if !ok {
 	    this.t.Fatalf("unexpected type %T", msg)
@@ -126,11 +146,19 @@ func (this *PPEventHandler) OnReceive(msg interface{}) {
 
 // OnError fails the test.
 func (this *PPEventHandler) OnError(err error) {
+	if !this.initialized {
+		return
+	}
+
 	this.t.Fatal(err)
 }
 
 // OnShutdown logs the shutdown event.
 func (this *PPEventHandler) OnShutdown() {
+	if !this.initialized {
+		return
+	}
+
 	log.Info("Shutting down %s", this.parent.name)
 }
 
@@ -317,6 +345,12 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 
 	<-time.After(1 * time.Second)
 
+	for _, cli := range cliList {
+		cli.Close()
+	}
+
+	<-time.After(1 * time.Second)
+
 	perfTotal := cliproto.perfs.Get(PERF_PROTO_SEND_TOTAL).Value()
 
 	log.Info(
@@ -339,7 +373,6 @@ func runClient(cli Connection, sendCount int, doneChan chan bool, t *testing.T) 
 		<-time.After(time.Duration(rand.Intn(5)+15) * time.Millisecond)
 	}
 
-	cli.Close()
 	doneChan <- true
 }
 

@@ -125,7 +125,6 @@ func NewProtocol(pName string, evtHandler EventHandler) *Protocol {
 			protoPerfNames,
 		),
 		rcvChan     : make(chan *Msg, 0),
-		sendChan    : make(chan uint32, 0),
 		sigMap      : make(map[uint16]MsgProcessor, 0),
 		syncObj     : lifecycle.New(),
 		timeoutChan : make(chan *TimeoutEvent, 0),
@@ -150,13 +149,13 @@ type Protocol struct {
 	discoChan   chan Connection
 	errChan     chan error
 	evtHandler  EventHandler
+	evtMutex    sync.RWMutex
 	name        string
 	netObjects  []NetConnector
 	objMutex    sync.RWMutex
 	perfs       *perf.CounterSet
 	rcvChan     chan *Msg
 	security    AccessProvider
-	sendChan    chan uint32
 	sigMap      map[uint16]MsgProcessor
 	syncObj     *lifecycle.Lifecycle
 	timeoutChan chan *TimeoutEvent
@@ -304,7 +303,8 @@ func (this *Protocol) RegisterConnection(con Connection) {
 
 // SendMsg transmits the supplied message to the target connection Id.
 func (this *Protocol) SendMsg(id uint32, sig uint16, msg interface{}) error {
-	return this.sendMsg(id, sig, msg)
+	this.sendMsg(id, sig, msg)
+	return nil
 }
 
 // SetAccessProvider sets the AccessProvider object responsible for authorizing
@@ -365,14 +365,20 @@ func (this *Protocol) SetCryptoProvider(provider CryptoProvider) {
 // Shutdown removes the Protocol from the net service, also unregistering all
 // associated message type signatures in the process.
 func (this *Protocol) Shutdown() {
-	this.objMutex.Lock()
-	for _, obj := range this.netObjects {
-		obj.Stop()
-	}
-	this.objMutex.Unlock()
+	go func() {
+		this.evtMutex.Lock()
+		this.evtHandler.Close()
+		this.evtMutex.Unlock()
 
-	this.syncObj.Shutdown()
-	this.evtHandler.Close()
+		this.objMutex.Lock()
+		defer this.objMutex.Unlock()
+		
+		for _, obj := range this.netObjects {
+			obj.Stop()
+		}
+
+		this.syncObj.Shutdown()
+	}()
 }
 
 // getAccess queries this Protocol's AccessProvider and returns its access level.
@@ -419,7 +425,9 @@ func (this *Protocol) handleEvents() {
 		case timeout := <-this.timeoutChan:
 			this.onTimeout(timeout)
 		case <-this.syncObj.QueryShutdown():
+			this.evtMutex.Lock()
 			this.evtHandler.OnShutdown()
+			this.evtMutex.Unlock()
 		}
 	}
 
@@ -435,7 +443,9 @@ func (this *Protocol) onConnect(con Connection) {
 	this.cliMap[con.Id()] = con
 	this.cliMutex.Unlock()
 	
+	this.evtMutex.Lock()
 	this.evtHandler.OnConnect(con)
+	this.evtMutex.Unlock()
 
 	this.perfs.Increment(PERF_PROTO_CONNECT)
 
@@ -453,7 +463,9 @@ func (this *Protocol) onDisconnect(con Connection) {
 	delete(this.cliMap, con.Id())
 	this.cliMutex.Unlock()
 
+	this.evtMutex.Lock()
 	this.evtHandler.OnDisconnect(con)
+	this.evtMutex.Unlock()
 
 	this.perfs.Increment(PERF_PROTO_DISCONNECT)
 
@@ -464,13 +476,9 @@ func (this *Protocol) onDisconnect(con Connection) {
 // onError attempts to feed the registered EventHandler with the
 // given err data.
 func (this *Protocol) onError(err error) {
+	this.evtMutex.Lock()
 	this.evtHandler.OnError(err)
-}
-
-// onRcv is called when a data receive is completed on underlying NetConnections
-// and sends the received message through the receive pipeline.
-func (this *Protocol) onRcv(msg *Msg) {
-	this.rcvMsg(msg)
+	this.evtMutex.Unlock()
 }
 
 // onTimeout is called when a timeout event bubbles up from underlying
@@ -490,7 +498,9 @@ func (this *Protocol) onTimeout(timeout *TimeoutEvent) {
 		this.perfs.Increment(PERF_PROTO_TIMEOUT_SEND)
 	}
 
+	this.evtMutex.Lock()
 	this.evtHandler.OnTimeout(timeout)
+	this.evtMutex.Unlock()
 }
 
 // rcvMsg is the message pipeline for incoming messages. First, the message
@@ -601,7 +611,9 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 		)))
 	}
 
+	this.evtMutex.Lock()
 	this.evtHandler.OnReceive(obj)
+	this.evtMutex.Unlock()
 
 	this.perfs.Increment(PERF_PROTO_RCV_OK)
 	this.perfs.Add(PERF_PROTO_RCV_BYTES, dataLen)
