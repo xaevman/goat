@@ -36,8 +36,8 @@ func New() *Lifecycle {
 		run: 		   true,
 		heartbeatChan: make(chan bool, 1),
 		heartbeatDur:  time.Duration(0),
-		shutdownChan:  make(chan bool),
-		waitChan:      make(chan bool),
+		shutdownChan:  make(chan bool, 1),
+		waitChan:      make(chan bool, 1),
 	}
 
 	return &newObj

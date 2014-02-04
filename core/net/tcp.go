@@ -26,7 +26,7 @@ import (
 )
 
 // TCP Buffer size for reading data off the line.
-const TCP_BUFFER_SIZE_B = 1 * 1024 // 1KB
+const TCP_BUFFER_SIZE_B = 256
 
 
 // newtcpCli is a helper constructor function which returns a pointer to a
@@ -62,11 +62,11 @@ func (this *tcpCli) Start(addr string) (Connection, error) {
 		discoChan   : this.protocol.discoChan,
 		id          : atomic.AddUint32(&netId, 1),
 		rcvChan     : this.protocol.rcvChan,
-		readChan    : make(chan []byte),
+		readChan    : make(chan []byte, QUEUE_BUFFERS),
 		socket      : conn.(*net.TCPConn),
 		syncObj     : lifecycle.New(),
 		timeoutChan : this.protocol.timeoutChan,
-		writeChan   : make(chan []byte),
+		writeChan   : make(chan []byte, QUEUE_BUFFERS),
 	}
 
 	tCon.startHandlers()
@@ -146,11 +146,11 @@ func (this *tcpSrv) acceptConnections() {
 			discoChan   : this.protocol.discoChan,
 			id          : atomic.AddUint32(&netId, 1),
 			rcvChan     : this.protocol.rcvChan,
-			readChan    : make(chan []byte),
+			readChan    : make(chan []byte, QUEUE_BUFFERS),
 			socket      : cliCon.(*net.TCPConn),
 			syncObj     : lifecycle.New(),
 			timeoutChan : this.protocol.timeoutChan,
-			writeChan   : make(chan []byte),
+			writeChan   : make(chan []byte, QUEUE_BUFFERS),
 		}
 
 		this.protocol.connectChan <- &cli
@@ -211,8 +211,9 @@ func (this *tcpCon) Send(data []byte, timeoutSec int) {
 		if err == nil {
 			sig = GetMsgSig(header)
 		}
-
 		this.notifyTimeout(TIMEOUT_SEND, sig, this.id, data)
+	case <-this.syncObj.QueryShutdown():
+		return
 	}
 }
 
@@ -246,7 +247,7 @@ func (this *tcpCon) buildMsg(msgData []byte) []byte {
 // of of the line.
 func (this *tcpCon) handleReads() {
 	var count int
-	var err error
+	var err   error
 
 	buffer := make([]byte, TCP_BUFFER_SIZE_B)
 
@@ -261,12 +262,17 @@ func (this *tcpCon) handleReads() {
 		// received data
 		cpBuffer := make([]byte, count)
 		copy(cpBuffer, buffer[:count])
-		this.readChan <- cpBuffer
+
+		select {
+		case this.readChan<- cpBuffer:
+		case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
+		case <-this.syncObj.QueryShutdown():
+			return
+		}
 
 		// a real error
 		if err != nil {
 			log.Error("%v", err)
-			continue
 		}
 	}
 }
@@ -275,9 +281,9 @@ func (this *tcpCon) handleReads() {
 // write events onto the line.
 func (this *tcpCon) handleWrites() {
 	var count int
-	var err error
+	var err   error
 
-	for {
+	for this.syncObj.QueryRun() {
 		select {
 		case data := <-this.writeChan:
 			count, err = this.socket.Write(data)
@@ -290,6 +296,8 @@ func (this *tcpCon) handleWrites() {
 			if err != nil {
 				log.Error("%v", err)
 			}
+		case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
+		case <-this.syncObj.QueryShutdown():
 		}
 	}
 }
@@ -302,7 +310,13 @@ func (this *tcpCon) notifyDisco() {
 		return
 	}
 
-	this.discoChan<- this
+	select {
+	case this.discoChan<- this:
+	case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
+		log.Error("notifyDisco timeout")
+	case <-this.syncObj.QueryShutdown():
+		return
+	}
 }
 
 // notifyMsg bubbles a received msg up to the tcpCon's parent object.
@@ -311,7 +325,13 @@ func (this *tcpCon) notifyMsg(msg *Msg) {
 		return
 	}
 
-	this.rcvChan<- msg
+	select {
+	case this.rcvChan<- msg:
+	case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
+		log.Error("notifyMsg timeout")
+	case <-this.syncObj.QueryShutdown():
+		return
+	}	
 }
 
 // notifyTimeout bubbles a timeout event up to the tcpCon's parent object.
@@ -331,7 +351,13 @@ func (this *tcpCon) notifyTimeout(
 	timeout.ParentId    = id
 	timeout.TimeoutType = kind
 
-	this.timeoutChan<- timeout
+	select {
+	case this.timeoutChan<- timeout:
+	case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
+		log.Error("notifyTimeout timeout")
+	case <-this.syncObj.QueryShutdown():
+		return
+	}
 }
 
 // runCli runs in its own goroutine, handling read events that bubble up
@@ -346,6 +372,7 @@ func (this *tcpCon) runCli() {
 				pending := this.buildMsg(data)
 				pending != nil
 				pending = this.buildMsg(pending) {}
+		case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
 		case <-this.syncObj.QueryShutdown():
 		}
 	}

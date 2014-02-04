@@ -33,7 +33,7 @@ import (
 )
 
 // Amount of time to wait before transmitting the next test msg.
-const TEST_DELAY_MS = 20
+const TEST_DELAY_MS = 10
 
 // ChatTest is a net.EventHandler implementation which sends
 // randomized messages to the chat server and tests that they

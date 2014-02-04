@@ -223,6 +223,8 @@ func (this *DbgCli) sendCmd(cmd string) {
 
 func (this *DbgCli) printHelp() {
 	this.printChatText("Command help", sysStyle)
+	this.printChatText("?\t:\tPrint help text", sysStyle)
+	this.printChatText("exit\t:\tExit DbgCli", sysStyle)
 
 	for k, v := range cmdMap {
 		this.printChatText(
@@ -240,7 +242,7 @@ func (this *DbgCli) printHelp() {
 func (this *DbgCli) printChatText(txt string, style console.Style) {
 	console.Write(console.CURSOR_UP_ONE)
 	console.WriteLine("")
-	console.WriteLineFmt(txt, style)
+	console.WriteLineFmt(strings.TrimSuffix(txt, "\n"), style)
 }
 
 
@@ -284,13 +286,13 @@ func (this *DbgCli) handleInput(in string) {
 		return
 	}
 
+	console.Write(console.CURSOR_UP_ONE)
+	console.Write(console.CLEAR_LINE)
+
 	if in == "?" {
 		this.printHelp()
 		return
 	}
-
-	console.Write(console.CURSOR_UP_ONE)
-	console.Write(console.CLEAR_LINE)
 
 	this.sendCmd(in)
 }

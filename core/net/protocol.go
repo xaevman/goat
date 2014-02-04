@@ -115,9 +115,9 @@ func perfName(baseName string) string {
 func NewProtocol(pName string, evtHandler EventHandler) *Protocol {
 	newProto := Protocol{
 		cliMap      : make(map[uint32]Connection, 0),
-		connectChan : make(chan Connection, 1),
-		discoChan   : make(chan Connection, 1),
-		errChan     : make(chan error, 1),
+		connectChan : make(chan Connection, QUEUE_BUFFERS),
+		discoChan   : make(chan Connection, QUEUE_BUFFERS),
+		errChan     : make(chan error, QUEUE_BUFFERS),
 		evtHandler  : evtHandler,
 		name        : pName,
 		netObjects  : make([]NetConnector, 0),
@@ -126,10 +126,10 @@ func NewProtocol(pName string, evtHandler EventHandler) *Protocol {
 			PERF_PROTO_COUNT, 
 			protoPerfNames,
 		),
-		rcvChan     : make(chan *Msg, 1),
+		rcvChan     : make(chan *Msg, QUEUE_BUFFERS),
 		sigMap      : make(map[uint16]MsgProcessor, 0),
 		syncObj     : lifecycle.New(),
-		timeoutChan : make(chan *TimeoutEvent, 1),
+		timeoutChan : make(chan *TimeoutEvent, QUEUE_BUFFERS),
 	}
 
 	newProto.evtHandler.Init(&newProto)

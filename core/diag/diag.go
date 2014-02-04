@@ -28,7 +28,7 @@ import (
 )
 
 // Buffer size, in bytes, for storing stack traces.
-const TRACE_BUFFER_LEN_B = 1 * 1024 * 1024
+const TRACE_BUFFER_LEN_B = 1 * 1024 * 1024 // 1MB
 
 
 // DiagData represents all aggregated diagnostic information.
@@ -65,12 +65,8 @@ type SysData struct {
 	CGOCalls    int64
 	CPUCount    int
 	Error       string
-	GoDebug     string
-	GoGC        string
-	GoMaxProcs  string
-	GoPath      string
-	GoRoot      string
-	GoTraceback string
+	GoRoutines  int
+	GoVersion   string
 	Hostname    string
 	OS          string
 }
@@ -78,18 +74,22 @@ type SysData struct {
 // String pretty-prints the SysData object.
 func (this *SysData) String() string {
 	return fmt.Sprintf(
-		"Error:    %v\n"   +
-		"Hostname: %v\n"   +
-		"CPUCount: %v\n"   +
-		"CGOCalls: %v\n"   +
-		"GOOS:     %v\n"   +
-		"GOARCH:   %v",
+		"Error:        %v\n"   +
+		"Hostname:     %v\n"   +
+		"CPUCount:     %v\n"   +
+		"CGOCalls:     %v\n"   +
+		"OS:           %v\n"   +
+		"Architecture: %v\n"   +
+		"Go Routines:  %v\n"   +
+		"Go Version:   %v\n",
 		this.Error,
 		this.Hostname,
 		this.CPUCount,
 		this.CGOCalls,
 		this.OS,
 		this.Arch,
+		this.GoRoutines,
+		this.GoVersion,
 	)
 }
 
@@ -167,12 +167,8 @@ func NewSysData() *SysData {
 		CGOCalls    : runtime.NumCgoCall(),
 		CPUCount    : runtime.NumCPU(),
 		Hostname    : hostname,
-		GoDebug     : runtime.GODEBUG,
-		GoGC        : runtime.GOGC,
-		GoMaxProcs  : runtime.GOMAXPROCS,
-		GoPath      : runtime.GOPATH,
-		GoRoot      : runtime.GOROOT,
-		GoTraceback : runtime.GOTRACEBACK,
+		GoRoutines  : runtime.NumGoroutine(),
+		GoVersion   : runtime.Version(),
 		OS          : runtime.GOOS,
 	}
 

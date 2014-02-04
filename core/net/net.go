@@ -26,7 +26,11 @@ const (
 	DEFAULT_MSG_TIMEOUT_SEC = 15
 	MAX_TIMEOUT_SEC         = 300
 	MIN_TIMEOUT_SEC         = 1
+	QUEUE_TIMEOUT_SEC       = 5
 )
+
+// Event queue buffer sizes
+const QUEUE_BUFFERS = 100
 
 // Message header constants.
 const (
