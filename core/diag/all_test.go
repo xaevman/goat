@@ -19,8 +19,10 @@ import (
 
 // Stdlib imports.
 import (
+	"fmt"
 	"log"
 	"testing"
+	"time"
 )
 
 // Some perfs.
@@ -33,6 +35,7 @@ var perfNames = []string {
 	"Test1",
 	"Test2",
 }
+
 
 // TestDiag creates diag objects and formats them as strings and json.
 // If the process doesn't crash itself, the test passes!
@@ -56,4 +59,16 @@ func TestDiag(t *testing.T) {
 	json := AsJson(diag)
 	log.Println("AsJson ******************************")
 	log.Println(json)
+}
+
+
+func TestBlocked(t *testing.T) {
+	fmt.Println()
+	log.Println("Testing blocked output ==============")
+	go func() {
+		<-time.After(1 * time.Second)
+		fmt.Println(NewBlockedData())
+	}()
+	
+	<-time.After(4 * time.Second)
 }

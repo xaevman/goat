@@ -24,11 +24,12 @@ import (
 // between samples. Addtionally, statistics can be enabled on a counter object
 // to enable tracking of variance, mean, median and standard deviation.
 type Counter struct {
-	mutex  sync.Mutex
-	perSec int64
-	stats  *Stat
-	total  int64
-	val    int64
+	maxPerSec int64
+	mutex     sync.Mutex
+	perSec    int64
+	stats     *Stat
+	total     int64
+	val       int64
 }
 
 // NewCounter initializes a new Counter object and returns a pointer to it
@@ -81,6 +82,15 @@ func (this *Counter) Increment() {
 	this.Add(1)
 }
 
+// MaxPerSec calculates and returns the per-second derivative from the most recent
+// two samples.
+func (this *Counter) MaxPerSec() int64 {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+
+	return this.maxPerSec
+}
+
 // PerSec calculates and returns the per-second derivative from the most recent
 // two samples.
 func (this *Counter) PerSec() int64 {
@@ -96,9 +106,10 @@ func (this *Counter) Reset() {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 
-	this.perSec = 0
-	this.total  = 0
-	this.val    = 0
+	this.maxPerSec = 0
+	this.perSec    = 0
+	this.total     = 0
+	this.val       = 0
 
 	if this.stats != nil {
 		this.stats.Reset()
@@ -139,9 +150,10 @@ func (this *Counter) String() string {
 	this.mutex.Unlock()
 
 	return fmt.Sprintf(
-		"value: %d, perSec: %d%s",
+		"value: %d, perSec: %d, maxPerSec: %d%s",
 		this.Value(),
 		this.PerSec(),
+		this.MaxPerSec(),
 		statTxt,
 	)
 }
@@ -161,7 +173,11 @@ func (this *Counter) calcPerSec() {
 	defer this.mutex.Unlock()
 
 	this.perSec = this.total
-	this.total  = 0
+	if this.perSec > this.maxPerSec {
+		this.maxPerSec = this.perSec
+	}
+	
+	this.total = 0
 
 	time.AfterFunc(1 * time.Second, this.calcPerSec)
 }

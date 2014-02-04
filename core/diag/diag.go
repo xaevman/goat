@@ -24,11 +24,20 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 	"runtime"
+	"strings"
 )
+
 
 // Buffer size, in bytes, for storing stack traces.
 const TRACE_BUFFER_LEN_B = 1 * 1024 * 1024 // 1MB
+
+// regex for parsing out the start of blocked go routines
+// in stack dumps.
+var blockedRegex = regexp.MustCompile(
+	"(?m)goroutine \\d* \\[chan .*\\]\\:$",
+)
 
 
 // DiagData represents all aggregated diagnostic information.
@@ -119,18 +128,45 @@ func New() *DiagData {
 	return data
 }
 
-// NewStackTrace dumps the current calling stack in string format.
-func NewStackTrace() string {
-	buffer := make([]byte, TRACE_BUFFER_LEN_B)
-	count  := runtime.Stack(buffer, false)	
-	return string(buffer[:count])
-}
+// NewBlockData returns call stack information for any go routines
+// which are currently blocking.
+func NewBlockedData() string {
+	var reading bool
+	var results bytes.Buffer
+	var temp    bytes.Buffer
 
-// NewFullStackTrace dumps stack traces for all active go routines.
-func NewFullStackTrace() string {
-	buffer := make([]byte, TRACE_BUFFER_LEN_B)
-	count  := runtime.Stack(buffer, true)
-	return string(buffer[:count])
+	readBuffer := bytes.NewBufferString(NewFullStackTrace())
+	line, err  := readBuffer.ReadString('\n');
+
+	for err == nil {
+		if reading && strings.TrimSpace(line) == "" {
+			reading = false
+			temp.WriteString(line)
+			results.WriteString(temp.String())
+			temp.Reset()
+
+			line, err = readBuffer.ReadString('\n')
+
+			continue
+		}
+
+		if reading {
+			temp.WriteString(line)
+
+			line, err = readBuffer.ReadString('\n')
+
+			continue
+		}
+
+		if blockedRegex.MatchString(line) {
+			temp.WriteString(line)
+			reading = true
+		}
+
+		line, err = readBuffer.ReadString('\n')
+	}
+
+	return results.String()
 }
 
 // NewEnvData creates and populates a new EnvData object and returns
@@ -149,12 +185,26 @@ func NewEnvData() *EnvData {
 	return &envData
 }
 
+// NewFullStackTrace dumps stack traces for all active go routines.
+func NewFullStackTrace() string {
+	buffer := make([]byte, TRACE_BUFFER_LEN_B)
+	count  := runtime.Stack(buffer, true)
+	return string(buffer[:count])
+}
+
 // NewMemData creates and populates a new runtime.MemStats object and
 // returns a pointer to it for use.
 func NewMemData() *runtime.MemStats {
 	stats := new(runtime.MemStats)
 	runtime.ReadMemStats(stats)
 	return stats
+}
+
+// NewStackTrace dumps the current calling stack in string format.
+func NewStackTrace() string {
+	buffer := make([]byte, TRACE_BUFFER_LEN_B)
+	count  := runtime.Stack(buffer, false)	
+	return string(buffer[:count])
 }
 
 // NewSysData creatse and populates a new SysData object and returns a

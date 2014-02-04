@@ -29,7 +29,6 @@ import (
 	"strings"
 )
 
-
 // Console text constants.
 const (
 	EXIT_MSG = "exit\n"
@@ -56,22 +55,26 @@ var (
 	}
 )
 
+// CmdInfo stores command, help text, and raw enum values for a given
+// prod.DBG_MSG subtype.
 type CmdInfo struct {
 	cmdTxt  string
 	helpTxt string
 	val     byte
 }
 
+// Map of commands to info objects.
 var cmdMap = map[string]*CmdInfo {
-	"env"   : &CmdInfo { "env"   , "Environment variable data", CMD_ENV },
-	"stack" : &CmdInfo { "stack" , "Full stack data",           CMD_STACK },
-	"mem"   : &CmdInfo { "mem"   , "Memory allocation data",    CMD_MEM },
-	"perf"  : &CmdInfo { "perf"  , "Performance counter data",  CMD_PERF },
-	"sys"   : &CmdInfo { "sys"   , "General system data",       CMD_SYS },
+	"blocked" : &CmdInfo { "blocked", "Blocked goroutines"       , CMD_BLOCKED },
+	"env"     : &CmdInfo { "env"    , "Environment variable data", CMD_ENV },
+	"stack"   : &CmdInfo { "stack"  , "Full stack data",           CMD_STACK },
+	"mem"     : &CmdInfo { "mem"    , "Memory allocation data",    CMD_MEM },
+	"perf"    : &CmdInfo { "perf"   , "Performance counter data",  CMD_PERF },
+	"sys"     : &CmdInfo { "sys"    , "General system data",       CMD_SYS },
 }
 
 
-//
+// DbgCli represents a basic, command-line driven debugging client.
 type DbgCli struct {
 	inputSync  *lifecycle.Lifecycle
 	msgHandler *CmdMsgHandler
@@ -80,7 +83,8 @@ type DbgCli struct {
 }
 	
 // Close deletes the CmdMsgHandler signature registration from the parent
-// protocol.
+// protocol, shuts down the console, and begins the application shutdown
+// process.
 func (this *DbgCli) Close() {
 	this.proto.DeleteSignature(this.msgHandler)
 	this.msgHandler = nil
@@ -90,8 +94,8 @@ func (this *DbgCli) Close() {
 	goapp.Stop()
 }
 
-// Init saves a reference to the parent protocol and registers the CmdMsgHandler
-// signature on the protocol.
+// Init saves a reference to the parent protocol, registers the CmdMsgHandler
+// signature on the protocol, and starts the console input goroutine.
 func (this *DbgCli) Init(proto *net.Protocol) {
 	this.inputSync  = lifecycle.New()
 	this.msgHandler = new(CmdMsgHandler)
@@ -103,7 +107,8 @@ func (this *DbgCli) Init(proto *net.Protocol) {
 	go this.startInput()
 }
 
-// OnConnect logs debugging information about the newly connected client.
+// OnConnect saves a reference to the net ID of the newly connected server
+// and prints welcome and help text to the console.
 func (this *DbgCli) OnConnect(con net.Connection) {
 	log.Debug("OnConnect %s", con.RemoteAddr())
 
@@ -120,8 +125,7 @@ func (this *DbgCli) OnConnect(con net.Connection) {
 	this.printHelp()
 }
 
-// OnDisconnect logs debugging information about the newly disconnected
-// client.
+// OnDisconnect begins the protocol shutdown process.
 func (this *DbgCli) OnDisconnect(con net.Connection) {
 	this.proto.Shutdown()
 	log.Error("Disconnected from server")
@@ -133,7 +137,8 @@ func (this *DbgCli) OnError(err error) {
 }
 
 // OnReceive makes sure that new incoming messages pass a type assertion
-// and then routes the message to the appropriate command handler.
+// and then routes the message to the appropriate command handler by
+// sub-type.
 func (this *DbgCli) OnReceive(msg interface{}) {
 	cmdMsg, ok := msg.(*CmdMsg)
 	if !ok {
@@ -161,7 +166,7 @@ func (this *DbgCli) OnReceive(msg interface{}) {
 	}
 }
 
-// OnShutdown performs no actions in DbgSrv.
+// OnShutdown begins the goapp shutdown process.
 func (this *DbgCli) OnShutdown() {
 	goapp.Stop()
 }
@@ -173,11 +178,63 @@ func (this *DbgCli) OnTimeout(timeout *net.TimeoutEvent) {
 }
 
 
+
+// handleInput is called when a new line of input text is received from
+// the console. If the supplied text matches EXIT_MSG, the shutdown
+// sequence is started. Otherwise, the text is parsed as either a help
+// or debugging command.
+func (this *DbgCli) handleInput(in string) {
+	if in == EXIT_MSG {
+		this.OnDisconnect(nil)
+		return
+	}
+
+	in = strings.TrimSpace(in)
+	if len(in) < 1 {
+		return
+	}
+
+	console.Write(console.CURSOR_UP_ONE)
+	console.Write(console.CLEAR_LINE)
+
+	if in == "?" {
+		this.printHelp()
+		return
+	}
+
+	this.sendCmd(in)
+}
+
+// printChatText prints text to the console window in the specified
+// style.
+func (this *DbgCli) printChatText(txt string, style console.Style) {
+	console.Write(console.CURSOR_UP_ONE)
+	console.WriteLine("")
+	console.WriteLineFmt(strings.TrimSuffix(txt, "\n"), style)
+}
+
+// printHelp prints the command help menu to the console.
+func (this *DbgCli) printHelp() {
+	this.printChatText("Command help", sysStyle)
+	this.printChatText("?\t:\tPrint help text", sysStyle)
+	this.printChatText("exit\t:\tExit DbgCli", sysStyle)
+
+	for k, v := range cmdMap {
+		this.printChatText(
+			fmt.Sprintf("%s\t:\t%s", k, v.helpTxt),
+			sysStyle,
+		)
+	}
+}
+
+// printResponse prints response messages to the console.
 func (this *DbgCli) printResponse(cmdMsg *CmdMsg) {
 	this.printChatText(cmdMsg.Data, txtStyle)
 }
 
-
+// sendCmd parses command line text into valid Dbg protocol commands,
+// constructs CmdMsg objects and passes them along to the protocol layer
+// for transmission.
 func (this *DbgCli) sendCmd(cmd string) {
 	if this.srvId == 0 {
 		this.printChatText(
@@ -218,83 +275,6 @@ func (this *DbgCli) sendCmd(cmd string) {
 	)
 
 	this.proto.SendMsg(this.srvId, prod.DBG_MSG, cmdMsg)
-}
-
-
-func (this *DbgCli) printHelp() {
-	this.printChatText("Command help", sysStyle)
-	this.printChatText("?\t:\tPrint help text", sysStyle)
-	this.printChatText("exit\t:\tExit DbgCli", sysStyle)
-
-	for k, v := range cmdMap {
-		this.printChatText(
-			fmt.Sprintf("%s\t:\t%s", k, v.helpTxt),
-			sysStyle,
-		)
-	}
-}
-
-
-// printChatText prints any text which should go into the chat window.
-// The lone exception is text input via Stdin, which should be handled by
-// printTextFromInput because of the extra new line that will be input
-// from that method.
-func (this *DbgCli) printChatText(txt string, style console.Style) {
-	console.Write(console.CURSOR_UP_ONE)
-	console.WriteLine("")
-	console.WriteLineFmt(strings.TrimSuffix(txt, "\n"), style)
-}
-
-
-// printTextFromInput handles printing the given text after accounting
-// for the extra new line that will be present from text input through
-// Stdin.
-func (this *DbgCli) printTextFromInput(txt string, style console.Style) {
-	console.Write(console.CURSOR_UP_ONE)
-	console.Write(console.CLEAR_LINE)
-	console.WriteLineFmt(txt, style)
-}
-
-// printPrompt inserts the given number of empty lines and then outputs the
-// prompt.
-func (this *DbgCli) printPrompt(spacing int) {
-	for i := 0; i < spacing; i++ {
-		console.WriteLine("")
-	}
-
-	console.Write(console.CURSOR_UP_ONE)
-	console.Write(console.CLEAR_LINE)
-	console.SetBold()
-	console.Write("> ")
-	console.ClearFormat()
-}
-
-
-// handleInput is called when a new line of input text is received from
-// the console. If the supplied text matches EXIT_MSG, the shutdown
-// sequence is started. Otherwise, the text is parsed as either a command
-// (if starting with /) or a chat message and sent to the server
-// appropriately.
-func (this *DbgCli) handleInput(in string) {
-	if in == EXIT_MSG {
-		this.OnDisconnect(nil)
-		return
-	}
-
-	in = strings.TrimSpace(in)
-	if len(in) < 1 {
-		return
-	}
-
-	console.Write(console.CURSOR_UP_ONE)
-	console.Write(console.CLEAR_LINE)
-
-	if in == "?" {
-		this.printHelp()
-		return
-	}
-
-	this.sendCmd(in)
 }
 
 // startInput starts the console input loop, reading text from

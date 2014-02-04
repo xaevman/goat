@@ -52,7 +52,8 @@ var dbgPerfs = perf.NewCounterSet(
 
 // Debugging commands.
 const (
-	CMD_ENV = iota
+	CMD_BLOCKED = iota
+	CMD_ENV
 	CMD_ERROR
 	CMD_MEM
 	CMD_PERF
@@ -135,6 +136,7 @@ func (this *CmdMsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
 	return msg, nil
 }
 
+// Signature returns prod.DBG_MSG.
 func (this *CmdMsgHandler) Signature() uint16 {
 	return prod.DBG_MSG
 }

@@ -85,6 +85,8 @@ func (this *DbgSrv) OnReceive(msg interface{}) {
 			cmdMsg.Data,
 		)
 		break
+	case CMD_BLOCKED:
+		this.onBlockedCmd(cmdMsg)
 	case CMD_ENV:
 		this.onEnvCmd(cmdMsg)
 	case CMD_ERROR:
@@ -112,10 +114,18 @@ func (this *DbgSrv) OnTimeout(timeout *net.TimeoutEvent) {
 }
 
 
-func (this *DbgSrv) send(cmdMsg *CmdMsg) {
-	this.proto.SendMsg(cmdMsg.FromId, prod.DBG_MSG, cmdMsg)
+// onBlockedCmd dumps stack trace information for currently blocked 
+// goroutines and transmits them back to the requestor.
+func (this *DbgSrv) onBlockedCmd(cmdMsg *CmdMsg) {
+	data       := diag.NewBlockedData()
+	cmdMsg.Cmd  = CMD_RESPONSE
+	cmdMsg.Data = data
+
+	this.send(cmdMsg)
 }
 
+// onEnvCmd dumps environment variable data and transmits it back to the
+// requestor.
 func (this *DbgSrv) onEnvCmd(cmdMsg *CmdMsg) {
 	env        := diag.NewEnvData()
 	cmdMsg.Cmd  = CMD_RESPONSE
@@ -124,14 +134,8 @@ func (this *DbgSrv) onEnvCmd(cmdMsg *CmdMsg) {
 	this.send(cmdMsg)
 }
 
-func (this *DbgSrv) onStackCmd(cmdMsg *CmdMsg) {
-	stack      := diag.NewFullStackTrace()
-	cmdMsg.Cmd  = CMD_RESPONSE
-	cmdMsg.Data = stack
-
-	this.send(cmdMsg)
-}
-
+// onMemCmd dumps memory statistics data adn transmits it back to the
+// requestor.
 func (this *DbgSrv) onMemCmd(cmdMsg *CmdMsg) {
 	mem        := diag.NewMemData()
 	cmdMsg.Cmd  = CMD_RESPONSE
@@ -140,14 +144,28 @@ func (this *DbgSrv) onMemCmd(cmdMsg *CmdMsg) {
 	this.send(cmdMsg)
 }
 
+// onPerfCmd dumps performance counter information and transmits it back
+// to the requestor.
 func (this *DbgSrv) onPerfCmd(cmdMsg *CmdMsg) {
 	perfs      := perf.TakeSnapshot()
 	cmdMsg.Cmd  = CMD_RESPONSE
-	cmdMsg.Data = perfs.String()
+	cmdMsg.Data = perfs.StringBrief()
 
 	this.send(cmdMsg)
 }
 
+// onStackCmd dumps a full stack trace of all goroutines and transmits it
+// back to the requestor.
+func (this *DbgSrv) onStackCmd(cmdMsg *CmdMsg) {
+	stack      := diag.NewFullStackTrace()
+	cmdMsg.Cmd  = CMD_RESPONSE
+	cmdMsg.Data = stack
+
+	this.send(cmdMsg)
+}
+
+// onSysCmd gathers basic system information and transmits it back to
+// the requestor.
 func (this *DbgSrv) onSysCmd(cmdMsg *CmdMsg) {
 	sys        := diag.NewSysData()
 	cmdMsg.Cmd  = CMD_RESPONSE
@@ -156,4 +174,7 @@ func (this *DbgSrv) onSysCmd(cmdMsg *CmdMsg) {
 	this.send(cmdMsg)
 }
 
-
+// send passes the give CmdMsg along to the protocol layer.
+func (this *DbgSrv) send(cmdMsg *CmdMsg) {
+	this.proto.SendMsg(cmdMsg.FromId, prod.DBG_MSG, cmdMsg)
+}
