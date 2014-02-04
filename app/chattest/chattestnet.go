@@ -89,10 +89,8 @@ func (this *ChatTest) OnConnect(con net.Connection) {
 // run. It makes the call in a separate go routine to avoid deadlocking
 // the protocol layer.
 func (this *ChatTest) OnDisconnect(con net.Connection) {
-	go func() {
-		this.proto.Shutdown()
-		log.Error("Disconnected from server")
-	}()
+	log.Error("Disconnected from server")
+	go goapp.Stop()
 }
 
 // OnError passes error received from the network layer on to the logging

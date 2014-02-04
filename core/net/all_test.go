@@ -40,6 +40,7 @@ import (
 	"errors"
 	"hash/crc32"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 )
@@ -57,14 +58,18 @@ var headerTests = []uint16 {
 
 // Shared data for TCP test.
 var (
+	cliHandler  *PPEventCli
 	cliproto    *Protocol
 	pingMsgProc = new(PingMsgProc)
 	pingTxt     = "ping"
 	pongMsgProc = new(PongMsgProc)
 	pongTxt     = "pong"
-	srvproto    *Protocol
 	srvAddr     = "127.0.0.1:8900"
+	srvHandler  *PPEventSrv
+	srvproto    *Protocol
+	waiter      sync.WaitGroup
 )
+
 
 // PPMsg represents a "ping" or "pong" network message.
 type PPMsg struct {
@@ -73,68 +78,49 @@ type PPMsg struct {
 	msgType    string
 }
 
-// PPEventHandler is a net.EventHandler implementation for the
-// net protocol tests.
-type PPEventHandler struct {
-	initialized bool
+
+// PPEventSrv is a net.EventHandler implementation for the
+// net protocol test server.
+type PPEventSrv struct {
 	parent     *Protocol
 	t          *testing.T
 }
 
-// Close performs no action for PPEventHandlers.
-func (this *PPEventHandler) Close() {
-	this.initialized = false
-}
+// Close performs no action for PPEventSrvs.
+func (this *PPEventSrv) Close() {}
 
 // Init saves a reference to the given protocol for future use.
-func (this *PPEventHandler) Init(proto *Protocol) {
-	this.parent      = proto
-	this.initialized = true
+func (this *PPEventSrv) Init(proto *Protocol) {
+	this.parent = proto
 }
 
 // OnConnect logs information about the new connection.
-func (this *PPEventHandler) OnConnect(con Connection) {
-	if !this.initialized {
-		return
-	}
-
+func (this *PPEventSrv) OnConnect(con Connection) {
 	log.Info("Connect (%s): %s", this.parent.name, con.RemoteAddr())
 }
 
 // OnDisconnect logs information about the newly disconnected connection
 // object.
-func (this *PPEventHandler) OnDisconnect(con Connection) {
-	if !this.initialized {
-		return
-	}
-
+func (this *PPEventSrv) OnDisconnect(con Connection) {
 	log.Info("Disconnect (%s): %s", this.parent.name, con.RemoteAddr())
 }
 
 // OnTimeout fails the test.
-func (this *PPEventHandler) OnTimeout(timeout *TimeoutEvent) {
-	if !this.initialized {
-		return
-	}
-
+func (this *PPEventSrv) OnTimeout(timeout *TimeoutEvent) {
 	this.t.Fatalf("Timeout: %+v", timeout)
 }
 
 // OnReceive performs a type assertion on the incoming message, logs
 // the message, and - if the received message was a ping - returns a
 // pong message back to the sender.
-func (this *PPEventHandler) OnReceive(msg interface{}) {
-	if !this.initialized {
-		return
-	}
-
+func (this *PPEventSrv) OnReceive(msg interface{}) {
 	pingMsg, ok := msg.(*PPMsg)
 	if !ok {
 	    this.t.Fatalf("unexpected type %T", msg)
 	    return
 	}
 
-	log.Info(pingMsg.msgType)
+	log.Debug(pingMsg.msgType)
 
 	if pingMsg.msgType == pongTxt {
 		return
@@ -145,21 +131,76 @@ func (this *PPEventHandler) OnReceive(msg interface{}) {
 }
 
 // OnError fails the test.
-func (this *PPEventHandler) OnError(err error) {
-	if !this.initialized {
-		return
-	}
-
-	this.t.Fatal(err)
+func (this *PPEventSrv) OnError(err error) {
+	this.t.Fatalf(err.Error())
 }
 
 // OnShutdown logs the shutdown event.
-func (this *PPEventHandler) OnShutdown() {
-	if !this.initialized {
-		return
+func (this *PPEventSrv) OnShutdown() {
+	log.Info("Shutting down %s", this.parent.name)
+}
+
+
+// PPEventCli is a net.EventHandler implementation for the
+// net protocol test server.
+type PPEventCli struct {
+	msgCount int
+	parent   *Protocol
+	t        *testing.T
+}
+
+// Close performs no action for PPEventSrvs.
+func (this *PPEventCli) Close() {}
+
+// Init saves a reference to the given protocol for future use.
+func (this *PPEventCli) Init(proto *Protocol) {
+	this.parent = proto
+}
+
+// OnConnect logs information about the new connection.
+func (this *PPEventCli) OnConnect(con Connection) {
+	log.Info("Connect (%s): %s", this.parent.name, con.RemoteAddr())
+
+	go runTest(con, this.msgCount, this.parent)
+}
+
+// OnDisconnect logs information about the newly disconnected connection
+// object.
+func (this *PPEventCli) OnDisconnect(con Connection) {
+	log.Info("Disconnect (%s): %s", this.parent.name, con.RemoteAddr())
+}
+
+// OnTimeout fails the test.
+func (this *PPEventCli) OnTimeout(timeout *TimeoutEvent) {
+	this.t.Fatalf("Timeout: %+v", timeout)
+}
+
+// OnReceive performs a type assertion on the incoming message, logs
+// the message, and - if the received message was a ping - returns a
+// pong message back to the sender.
+func (this *PPEventCli) OnReceive(msg interface{}) {
+	pingMsg, ok := msg.(*PPMsg)
+	if !ok {
+	    this.t.Fatalf("unexpected type %T", msg)
+	    return
 	}
 
+	log.Debug(pingMsg.msgType)
+}
+
+// OnError fails the test.
+func (this *PPEventCli) OnError(err error) {
+	this.t.Fatalf(err.Error())
+}
+
+// OnShutdown logs the shutdown event.
+func (this *PPEventCli) OnShutdown() {
 	log.Info("Shutting down %s", this.parent.name)
+}
+
+// SetMsgCount sets the target msgCount for this test run.
+func (this *PPEventCli) SetMsgCount(count int) {
+	this.msgCount = count
 }
 
 
@@ -279,11 +320,12 @@ func TestTCPSrv(t *testing.T) {
 
 	// log.DebugLogs = true
 
-	srvHandler  := new(PPEventHandler)
+	// cli
+
+	// srv
+	srvHandler   = new(PPEventSrv)
 	srvHandler.t = t
 	srvproto     = NewProtocol("SrvProto", srvHandler)
-
-	// set up the protocols
 	srvproto.AddSignature(pingMsgProc)
 	srvproto.AddSignature(pongMsgProc)
 	srvproto.SetAccessProvider(new(NoSecurity))
@@ -313,67 +355,54 @@ func TestTCPSrv(t *testing.T) {
 func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 	log.Info("SimpleTcpTest (%v clients, %v msg/cli)", cliCount, sendCount)
 
-	cliHandler  := new(PPEventHandler)
-	cliHandler.t = t
-	cliproto     = NewProtocol("CliProto", cliHandler)
-
+	cliHandler          = new(PPEventCli)
+	cliHandler.t        = t
+	cliHandler.msgCount = sendCount
+	cliproto            = NewProtocol("CliProto", cliHandler)
 	cliproto.AddSignature(pingMsgProc)
 	cliproto.AddSignature(pongMsgProc)
 	cliproto.SetAccessProvider(new(NoSecurity))
 
+	start := time.Now()
+
 	for i := 0; i < cliCount; i++ {
+		waiter.Add(1)
 		cliproto.DialTcp(srvAddr)
 	}
 
-	cliList := cliproto.GetAllConnections()
+	waiter.Wait()
 
-	log.Info("%v clients connected", len(cliList))
-	doneChan := make(chan bool)
-	<-time.After(2 * time.Second)
-
-	start := time.Now()
-
-	for i := range cliList {
-		go runClient(cliList[i], sendCount, doneChan, t)
-	}
-
-	for i := 0; i < len(cliList); i++ {
-		<-doneChan
-	}
-
-	runTime := time.Since(start)
-
-	<-time.After(1 * time.Second)
-
-	for _, cli := range cliList {
-		cli.Close()
-	}
-
-	<-time.After(1 * time.Second)
-
+	runTime   := time.Since(start)
 	perfTotal := cliproto.perfs.Get(PERF_PROTO_SEND_TOTAL).Value()
 
 	log.Info(
 		"%d clients, %d messages in %v (%.2f msg/sec)",
-		len(cliList),
+		cliCount,
 		perfTotal,
 		runTime,
 		float64(perfTotal) / runTime.Seconds(),
 	)
+
+	cliproto.Shutdown()
 }
 
-// runClient connects to the test TCPSrv instance and sends lots of
+// runTest connects to the test TCPSrv instance and sends lots of
 // messages at semi-random intervals.
-func runClient(cli Connection, sendCount int, doneChan chan bool, t *testing.T) {
-	for i := 0; i < sendCount; i++ {
+func runTest(cli Connection, count int, proto *Protocol) {
+	<-time.After(1 * time.Second)
+
+	for i := 0; i < count; i++ {
 		ppMsg := new(PPMsg)
-		cliproto.SendMsg(cli.Id(), PING_MSG_TYPE, ppMsg)
+		proto.SendMsg(cli.Id(), PING_MSG_TYPE, ppMsg)
 
 		// simulate a normal amount of internet latency
 		<-time.After(time.Duration(rand.Intn(5)+15) * time.Millisecond)
 	}
 
-	doneChan <- true
+	<-time.After(1 * time.Second)
+	cli.Close()
+
+	waiter.Done()
 }
 
 // testHeaders is a generalized function for testing all of the get and set

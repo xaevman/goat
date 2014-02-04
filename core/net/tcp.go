@@ -178,6 +178,7 @@ type tcpCon struct {
 
 // close shuts down the client TCP connection.
 func (this *tcpCon) Close() {
+	this.notifyDisco()
 	this.socket.Close()
 }
 

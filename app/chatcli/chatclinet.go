@@ -114,15 +114,13 @@ func (this *ChatCli) OnConnect(con net.Connection) {
 // we have to call shutdown on the protocol in a non-blocking manner 
 // (OnDisconnect must return before protocol.Shutdown can proceed).
 func (this *ChatCli) OnDisconnect(con net.Connection) {
-	go func() {
-		this.proto.Shutdown()
+	console.WriteLine("")
+	this.printChatText(
+		"Disconnected from server",
+		errStyle,
+	)
 
-		console.WriteLine("")
-		this.printChatText(
-			"Disconnected from server",
-			errStyle,
-		)
-	}()
+	go goapp.Stop()
 }
 
 // OnError forwards errors received from the network layer on to the

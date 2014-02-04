@@ -16,7 +16,6 @@ package main
 import (
 	"github.com/xaevman/goat/core/goapp"
 	"github.com/xaevman/goat/core/net"
-	"github.com/xaevman/goat/prod/dbg"
 )
 
 // Application name.
@@ -24,7 +23,7 @@ const APP_NAME = "DbgCli"
 
 // Application entry point.
 func main() {
-	evtHandler := new(dbg.DbgCli)
+	evtHandler := new(DbgCli)
 	proto      := net.NewProtocol(APP_NAME, evtHandler)
 	proto.DialTcp("127.0.0.1:8910")
 

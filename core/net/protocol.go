@@ -367,20 +367,18 @@ func (this *Protocol) SetCryptoProvider(provider CryptoProvider) {
 // Shutdown removes the Protocol from the net service, also unregistering all
 // associated message type signatures in the process.
 func (this *Protocol) Shutdown() {
-	go func() {
-		this.evtMutex.Lock()
-		this.evtHandler.Close()
-		this.evtMutex.Unlock()
+	this.evtMutex.Lock()
+	this.evtHandler.Close()
+	this.evtMutex.Unlock()
 
-		this.objMutex.Lock()
-		defer this.objMutex.Unlock()
-		
-		for _, obj := range this.netObjects {
-			obj.Stop()
-		}
+	this.objMutex.Lock()
+	defer this.objMutex.Unlock()
+	
+	for _, obj := range this.netObjects {
+		obj.Stop()
+	}
 
-		this.syncObj.Shutdown()
-	}()
+	this.syncObj.Shutdown()
 }
 
 // getAccess queries this Protocol's AccessProvider and returns its access level.

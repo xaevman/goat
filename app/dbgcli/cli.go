@@ -10,7 +10,7 @@
 //
 //  -----------
 
-package dbg
+package main
 
 // External imports.
 import (
@@ -20,6 +20,7 @@ import (
 	"github.com/xaevman/goat/lib/console"
 	"github.com/xaevman/goat/lib/lifecycle"
 	"github.com/xaevman/goat/prod"
+	"github.com/xaevman/goat/prod/dbg"
 )
 
 // Stdlib imports
@@ -65,19 +66,19 @@ type CmdInfo struct {
 
 // Map of commands to info objects.
 var cmdMap = map[string]*CmdInfo {
-	"blocked" : &CmdInfo { "blocked", "Blocked goroutines"       , CMD_BLOCKED },
-	"env"     : &CmdInfo { "env"    , "Environment variable data", CMD_ENV },
-	"stack"   : &CmdInfo { "stack"  , "Full stack data",           CMD_STACK },
-	"mem"     : &CmdInfo { "mem"    , "Memory allocation data",    CMD_MEM },
-	"perf"    : &CmdInfo { "perf"   , "Performance counter data",  CMD_PERF },
-	"sys"     : &CmdInfo { "sys"    , "General system data",       CMD_SYS },
+	"blocked" : &CmdInfo { "blocked", "Blocked goroutines"       , dbg.CMD_BLOCKED },
+	"env"     : &CmdInfo { "env"    , "Environment variable data", dbg.CMD_ENV },
+	"stack"   : &CmdInfo { "stack"  , "Full stack data",           dbg.CMD_STACK },
+	"mem"     : &CmdInfo { "mem"    , "Memory allocation data",    dbg.CMD_MEM },
+	"perf"    : &CmdInfo { "perf"   , "Performance counter data",  dbg.CMD_PERF },
+	"sys"     : &CmdInfo { "sys"    , "General system data",       dbg.CMD_SYS },
 }
 
 
 // DbgCli represents a basic, command-line driven debugging client.
 type DbgCli struct {
 	inputSync  *lifecycle.Lifecycle
-	msgHandler *CmdMsgHandler
+	msgHandler *dbg.CmdMsgHandler
 	proto      *net.Protocol
 	srvId      uint32
 }
@@ -98,7 +99,7 @@ func (this *DbgCli) Close() {
 // signature on the protocol, and starts the console input goroutine.
 func (this *DbgCli) Init(proto *net.Protocol) {
 	this.inputSync  = lifecycle.New()
-	this.msgHandler = new(CmdMsgHandler)
+	this.msgHandler = new(dbg.CmdMsgHandler)
 	this.proto      = proto
 
 	this.proto.AddSignature(this.msgHandler)
@@ -127,8 +128,8 @@ func (this *DbgCli) OnConnect(con net.Connection) {
 
 // OnDisconnect begins the protocol shutdown process.
 func (this *DbgCli) OnDisconnect(con net.Connection) {
-	this.proto.Shutdown()
 	log.Error("Disconnected from server")
+	go goapp.Stop()
 }
 
 // OnError passes network error messages along to the logging service.
@@ -140,7 +141,7 @@ func (this *DbgCli) OnError(err error) {
 // and then routes the message to the appropriate command handler by
 // sub-type.
 func (this *DbgCli) OnReceive(msg interface{}) {
-	cmdMsg, ok := msg.(*CmdMsg)
+	cmdMsg, ok := msg.(*dbg.CmdMsg)
 	if !ok {
 		log.Error("Cannot handle message type %T", cmdMsg)
 		return
@@ -157,10 +158,10 @@ func (this *DbgCli) OnReceive(msg interface{}) {
 			errStyle,
 		)
 		break
-	case CMD_RESPONSE:
+	case dbg.CMD_RESPONSE:
 		this.printResponse(cmdMsg)
 		break
-	case CMD_ERROR:
+	case dbg.CMD_ERROR:
 		this.OnError(errors.New(cmdMsg.Data))
 		break
 	}
@@ -228,7 +229,7 @@ func (this *DbgCli) printHelp() {
 }
 
 // printResponse prints response messages to the console.
-func (this *DbgCli) printResponse(cmdMsg *CmdMsg) {
+func (this *DbgCli) printResponse(cmdMsg *dbg.CmdMsg) {
 	this.printChatText(cmdMsg.Data, txtStyle)
 }
 
@@ -262,7 +263,7 @@ func (this *DbgCli) sendCmd(cmd string) {
 		return
 	}
 
-	cmdMsg     := new(CmdMsg)
+	cmdMsg     := new(dbg.CmdMsg)
 	cmdMsg.Cmd  = cmdInfo.val
 
 	if len(parts) > 1 {
