@@ -410,12 +410,19 @@ func testHeaders(msgSig uint16, t *testing.T) {
 	// round trip and test header, payload, and flags
 	SetMsgHeader(header, buffer)
 	SetMsgPayload([]byte(text), buffer)
-	rtPayload := string(GetMsgPayload(buffer))
-	rtHeader := GetMsgHeader(buffer)
-	rtMsgSig := GetMsgSig(rtHeader)
-	rtMsgSize := GetMsgSize(rtHeader)
+	rtPayloadRaw, err := GetMsgPayload(buffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rtHeader, err := GetMsgHeader(buffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rtPayload  := string(rtPayloadRaw)
+	rtMsgSig   := GetMsgSig(rtHeader)
+	rtMsgSize  := GetMsgSize(rtHeader)
 	rtChecksum := GetMsgChecksum(rtHeader)
-	rtDataHash := crc32.ChecksumIEEE(GetMsgPayload(buffer))
+	rtDataHash := crc32.ChecksumIEEE(rtPayloadRaw)
 
 	if !ValidateMsgHeader(buffer) {
 		t.Fatalf("Buffer failed header validation", buffer)
