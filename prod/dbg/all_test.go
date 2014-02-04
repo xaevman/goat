@@ -43,8 +43,8 @@ func TestMsgSig(t *testing.T) {
 func TestMsgSerialize(t *testing.T) {
 	handler := new(CmdMsgHandler)
 	cmd     := new(CmdMsg)
-	cmd.Cmd  = "MyTestCmd"
-	cmd.Data = "My Test Data"
+	cmd.Cmd  = CMD_JDUMP
+	cmd.Data = ""
 
 	b, err := handler.SerializeMsg(cmd)
 	if err != nil {

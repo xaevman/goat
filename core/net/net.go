@@ -62,6 +62,11 @@ var (
 var (
 	ErrDeserializeFailed = errors.New("Deserialization failed")
 	ErrInvalidType       = errors.New("Invalid type received")
+	ErrBufferTooSmall    = errors.New(
+		"msgData buffer not large enough to contain a message",
+	)
+	ErrInvalidMsgType    = errors.New("msgType > MAX_MSG_TYPE")
+	ErrMaxMsgSize        = errors.New("Message size > MAX_NET_MSG_LEN")
 )
 
 // AccessProvider specifies the interface which network protocols will use
@@ -152,9 +157,9 @@ func GetMsgEncryptedFlag(header uint64) bool {
 }
 
 // GetMsgHeader retrieves the 64bit header from a raw message buffer.
-func GetMsgHeader(msgData []byte) uint64 {
+func GetMsgHeader(msgData []byte) (uint64, error) {
 	if len(msgData) < HEADER_LEN_B {
-		panic("msgData buffer less than 8 bytes")
+		return 0, ErrBufferTooSmall
 	}
 
 	header := uint64(msgData[0]) << 56 | 
@@ -166,19 +171,23 @@ func GetMsgHeader(msgData []byte) uint64 {
 		uint64(msgData[6]) << 8  |
 		uint64(msgData[7])
 
-	return header
+	return header, nil
 }
 
 // GetMsgPayload returns the payload portion of a raw message buffer.
-func GetMsgPayload(msgData []byte) []byte {
+func GetMsgPayload(msgData []byte) ([]byte, error) {
 	if len(msgData) < HEADER_LEN_B {
-		panic("msgData buffer not large enough to contain a message")
+		return nil, ErrBufferTooSmall
 	}
 
-	header := GetMsgHeader(msgData)
-	size   := GetMsgSize(header)
+	header, err := GetMsgHeader(msgData)
+	if err != nil {
+		return nil, err
+	}
 
-	return msgData[HEADER_LEN_B : HEADER_LEN_B + size]
+	size := GetMsgSize(header)
+
+	return msgData[HEADER_LEN_B : HEADER_LEN_B + size], nil
 }
 
 // GetMsgSig retrieves the message type signature out of a raw message header.
@@ -236,9 +245,9 @@ func SetMsgEncryptedFlag(header *uint64, val bool) {
 
 // SetMsgHeader sets the first 8 bytes of a raw data buffer with the supplied
 // header.
-func SetMsgHeader(header uint64, msgData []byte) {
+func SetMsgHeader(header uint64, msgData []byte) error {
 	if len(msgData) < HEADER_LEN_B {
-		panic("msgData buffer less than 2 bytes")
+		return ErrBufferTooSmall
 	}
 
 	msgData[0] = byte(header >> 56)
@@ -249,37 +258,55 @@ func SetMsgHeader(header uint64, msgData []byte) {
 	msgData[5] = byte(header >> 16)
 	msgData[6] = byte(header >>  8)
 	msgData[7] = byte(header)
+
+	return nil
 }
 
 // SetMsgPayload takes the supplied message payload, sets the message size
 // property, computes and sets the checksum property, and also copies 
 // the message payload into the raw buffer.
 func SetMsgPayload(data, msgData []byte) {
-	header := GetMsgHeader(msgData)
-	SetMsgSize(&header, len(data))
+	header, err := GetMsgHeader(msgData)
+	if err != nil {
+		panic("Setting payload on a message without valid header")
+	}
+	
+	err = SetMsgSize(&header, len(data))
+	if err != nil {
+		panic(err)
+	}
+
 	SetMsgChecksum(&header, crc32.ChecksumIEEE(data))
-	SetMsgHeader(header, msgData)
+
+	err = SetMsgHeader(header, msgData)
+	if err != nil {
+		panic(err)
+	}
 
 	copy(msgData[HEADER_LEN_B:], data)
 }
 
 // SetMsgSig sets the first 10 bits of a message header with the supplied
 // msgType.
-func SetMsgSig(header *uint64, msgType uint16) {
+func SetMsgSig(header *uint64, msgType uint16) error {
 	if msgType > MAX_MSG_TYPE {
-		panic("msgType > MAX_MSG_TYPE")
+		return ErrInvalidMsgType
 	}
 
 	*header = *header | uint64(GetMsgSigPart(msgType))
+
+	return nil
 }
 
 // SetMsgSize sets the message size property on a raw data buffer.
-func SetMsgSize(header *uint64, size int) {
+func SetMsgSize(header *uint64, size int) error {
 	if size > MAX_NET_MSG_LEN {
-		panic("Message size > MAX_NET_MSG_LEN")
+		return ErrMaxMsgSize
 	}
 
 	*header = *header | uint64(size) << 16
+
+	return nil
 }
 
 // ValidateMsgHeader does some simple validation of the header in a raw

@@ -144,7 +144,12 @@ func (this *Msg) addData(newData []byte) ([]byte, bool) {
 		}
 
 		// header complete, intialize the rest of the object
-		this.header    = GetMsgHeader(this.hdrBuffer)
+		hdr, err := GetMsgHeader(this.hdrBuffer)
+		if err != nil {
+			panic ("hdrBuffer not large enough to hold header")
+		}
+
+		this.header    = hdr
 		this.data      = make([]byte, GetMsgSize(this.header))
 		this.hdrBuffer = nil
 	}

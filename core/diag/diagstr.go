@@ -16,61 +16,54 @@ package diag
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 )
 
 // AsString aggregates and returns text-based diagnostics information.
 // Diagnostic information includes hostname, CPU count, environment data,
 // stack traces for all running goroutines, and memory allocation statistics.
-func AsString(err interface{}) string {
-	data := New(err)
+func AsString(diagData *DiagData) string {
+	data := New()
 
 	return fmt.Sprintf(
-		"\n==== [Begin Crash Report] ====\n" +
-			"Error:    %v\n"   +
-			"Hostname: %v\n"   +
-			"CPUCount: %v\n"   +
-			"CGOCalls: %v\n"   +
-			"GOOS:     %v\n"   +
-			"GOARCH:   %v\n\n" +
-			"%s" +
-			"%s" +
-			"%s" +
-			"%s" +
-			"==== [End Crash Report] ====",
-		data.System.Error,
-		data.System.Hostname,
-		data.System.CPUCount,
-		data.System.CGOCalls,
-		data.System.OS,
-		data.System.Arch,
-		fmtEnvStr(data),
-		fmtPerfStr(data),
-		fmtStackTraceStr(data),
-		fmtMemStatsStr(data),
+		"\n"                                   +
+		"==== [Begin Crash Report] ====\n"     +
+		"%s\n\n"                               +
+		"==== [Begin Env] ====\n"              + 
+		"%s"                                   +
+		"==== [End Env] ====\n\n"              +
+		"==== [Begin Perf Snapshot] ====\n"    +
+		"%s"                                   +
+		"==== [End Perf Snapshot] ====\n\n"    +
+		"==== [Begin Stack Trace] ====\n"      +
+		"%s"                                   +
+		"==== [End Stack Trace] ====\n\n"      +		
+		"==== [Begin Full Stack Trace] ====\n" +
+		"%s"                                   +
+		"==== [End Full Stack Trace] ====\n\n" +
+		"==== [Begin MemStats] ====\n"         +
+		"%s"                                   +
+		"==== [End MemStats] ====\n\n"         +
+		"==== [Begin Malloc Stats] ====\n"     +
+		"%s"                                   +
+		"==== [End Malloc Stats] ====\n\n"     +
+		"==== [End Crash Report] ====",
+		data.System,
+		data.Environment,
+		data.Perfs,
+		data.CallStack,
+		data.FullStackTrace,
+		FmtMemStatsStr(data.Memory),
+		FmtMallocStatsStr(data.Memory),
 	)
 }
 
-// fmtEnvStr dumps the current environment data and formats it as text.
-func fmtEnvStr(data *DiagData) string {
-	var buffer bytes.Buffer
 
-	buffer.WriteString("==== [Begin Env] ====\n")
-
-	for k, v := range data.Environment.Vars {
-		buffer.WriteString(fmt.Sprintf("%v = %v\n", k, v))
-	}
-
-	buffer.WriteString("==== [End Env] ====\n\n")
-
-	return buffer.String()
-}
-
-// fmtMemStatsStr dumps memory allocation statistics and formats it as text.
-func fmtMemStatsStr(data *DiagData) string {
-	var buffer bytes.Buffer
-
-	buffer.WriteString(fmt.Sprintf(
-		"==== [Begin MemStats] ====\n"+
+// FmtMemStatsStr dumps memory allocation statistics and formats it as text.
+// Malloc information is not included for brevity. Get it by calling
+// FmtMallocStatsStr.
+func FmtMemStatsStr(data *runtime.MemStats) string {
+	return fmt.Sprintf(
 		"Alloc:        %v\n"+
 		"TotalAlloc:   %v\n"+
 		"Sys:          %v\n"+
@@ -97,40 +90,43 @@ func fmtMemStatsStr(data *DiagData) string {
 		"PauseTotalNs: %v\n"+
 		"NumGC:        %v\n"+
 		"EnableGC:     %v\n"+
-		"DebugGC:      %v\n"+
-		"==== [End MemStats] ====\n\n",
-		data.Memory.Alloc,
-		data.Memory.TotalAlloc,
-		data.Memory.Sys,
-		data.Memory.Lookups,
-		data.Memory.Mallocs,
-		data.Memory.Frees,
-		data.Memory.HeapAlloc,
-		data.Memory.HeapSys,
-		data.Memory.HeapIdle,
-		data.Memory.HeapInuse,
-		data.Memory.HeapReleased,
-		data.Memory.HeapObjects,
-		data.Memory.StackInuse,
-		data.Memory.StackSys,
-		data.Memory.MSpanInuse,
-		data.Memory.MSpanSys,
-		data.Memory.MCacheInuse,
-		data.Memory.MCacheSys,
-		data.Memory.BuckHashSys,
-		data.Memory.GCSys,
-		data.Memory.OtherSys,
-		data.Memory.NextGC,
-		data.Memory.LastGC,
-		data.Memory.PauseTotalNs,
-		data.Memory.NumGC,
-		data.Memory.EnableGC,
-		data.Memory.DebugGC,
-	))
+		"DebugGC:      %v\n",
+		data.Alloc,
+		data.TotalAlloc,
+		data.Sys,
+		data.Lookups,
+		data.Mallocs,
+		data.Frees,
+		data.HeapAlloc,
+		data.HeapSys,
+		data.HeapIdle,
+		data.HeapInuse,
+		data.HeapReleased,
+		data.HeapObjects,
+		data.StackInuse,
+		data.StackSys,
+		data.MSpanInuse,
+		data.MSpanSys,
+		data.MCacheInuse,
+		data.MCacheSys,
+		data.BuckHashSys,
+		data.GCSys,
+		data.OtherSys,
+		data.NextGC,
+		data.LastGC,
+		data.PauseTotalNs,
+		data.NumGC,
+		data.EnableGC,
+		data.DebugGC,
+	)
+}
 
-	buffer.WriteString("==== [Begin Malloc Stats] ====\n")
+// FmtMallocStatsStr outputs the extended malloc information from a given
+// MemStats instance as basic text.
+func FmtMallocStatsStr(data *runtime.MemStats) string {
+	var buffer bytes.Buffer
 
-	for i, v := range data.Memory.BySize {
+	for i, v := range data.BySize {
 		if v.Mallocs < 1 {
 			continue
 		}
@@ -146,44 +142,10 @@ func fmtMemStatsStr(data *DiagData) string {
 
 		buffer.WriteString(memSize)
 
-		if i < len(data.Memory.BySize)-1 {
+		if i < len(data.BySize)-1 {
 			buffer.WriteString("\n")
 		}
 	}
 
-	buffer.WriteString("==== [End Malloc Stats] ====\n\n")
-
 	return buffer.String()
-}
-
-// fmtPerfStr prints the perf snapshot along with appropriate header and 
-// footer for parsing.
-func fmtPerfStr(data *DiagData) string {
-	var buffer bytes.Buffer
-
-	buffer.WriteString("==== [Begin Perf Snapshot] ====\n")
-	buffer.WriteString(data.Perfs.String())
-	buffer.WriteString("==== [End Perf Snapshot] ====\n\n")
-
-	return buffer.String()
-}
-
-// fmtStackTraceStr dumps the current stack, and the stack of any executing
-// goroutines and formats the data as text.
-func fmtStackTraceStr(data *DiagData) string {
-	stackTrace := fmt.Sprintf(
-		"==== [Begin Stack Trace] ====\n"+
-		"%v"+
-		"==== [End Stack Trace] ====\n\n",
-		data.CallStack,
-	)
-
-	fullTrace := fmt.Sprintf(
-		"==== [Begin Full Stack Trace] ====\n"+
-		"%v"+
-		"==== [End Full Stack Trace] ====\n\n",
-		data.FullStackTrace,
-	)
-
-	return stackTrace + fullTrace
 }

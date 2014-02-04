@@ -50,6 +50,17 @@ var dbgPerfs = perf.NewCounterSet(
 	perfDbgNames,
 )
 
+// Debugging commands.
+const (
+	CMD_ENV = iota
+	CMD_ERROR
+	CMD_MEM
+	CMD_PERF
+	CMD_RESPONSE
+	CMD_STACK
+	CMD_SYS
+)
+
 
 // CmdMsg represents a command message being sent into the debugging
 // system. Access is the authorized level of access passed up from the
@@ -63,8 +74,9 @@ var dbgPerfs = perf.NewCounterSet(
 // debugging data from the server.
 type CmdMsg struct {
 	Access byte
-	Cmd    string
+	Cmd    byte
 	Data   string
+	FromId uint32
 }
 
 
@@ -87,13 +99,14 @@ func (this *CmdMsgHandler) DeserializeMsg(msg *net.Msg, access byte) (interface{
 	data   := msg.GetPayload()
 	cmdmsg := new(CmdMsg)
 
-	cmdmsg.Cmd, err = buffer.ReadString(data, &cursor)
+	cmdmsg.Cmd, err = buffer.ReadByte(data, &cursor)
 	if err != nil { return nil, err }
 
 	cmdmsg.Data, err = buffer.ReadString(data, &cursor)
 	if err != nil { return nil, err }
 
 	cmdmsg.Access = access
+	cmdmsg.FromId = msg.From()
 
 	return cmdmsg, nil
 }
@@ -107,12 +120,12 @@ func (this *CmdMsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
 	}
 
 	dataLen := 
-		buffer.LenString(cmdmsg.Cmd) +
+		buffer.LenByte() +
 		buffer.LenString(cmdmsg.Data)
 
 	dataBuffer := make([]byte, dataLen)
 
-	buffer.WriteString(cmdmsg.Cmd, dataBuffer, &cursor)
+	buffer.WriteByte(cmdmsg.Cmd, dataBuffer, &cursor)
 	buffer.WriteString(cmdmsg.Data, dataBuffer, &cursor)
 
 	msg := net.NewMsg()

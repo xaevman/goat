@@ -33,6 +33,7 @@ const (
 	PERF_PROTO_DISCONNECT
 	PERF_PROTO_ERR_AUTH_CLIENT
 	PERF_PROTO_ERR_DESERIALIZE
+	PERF_PROTO_ERR_MAX_MSG_SIZE
 	PERF_PROTO_ERR_NO_ACCESS
 	PERF_PROTO_ERR_NO_PROVIDER
 	PERF_PROTO_ERR_RCV_CHECKSUM
@@ -64,6 +65,7 @@ var protoPerfNames = []string {
 	"Disconnect",
 	"ErrorAuthClient",
 	"ErrorDeserialize",
+	"ErrorExceedMaxMsgSize",
 	"ErrorNoAccess",
 	"ErrorNoProvider",
 	"ErrorReceiveChecksum",
@@ -113,9 +115,9 @@ func perfName(baseName string) string {
 func NewProtocol(pName string, evtHandler EventHandler) *Protocol {
 	newProto := Protocol{
 		cliMap      : make(map[uint32]Connection, 0),
-		connectChan : make(chan Connection, 0),
-		discoChan   : make(chan Connection, 0),
-		errChan     : make(chan error, 0),
+		connectChan : make(chan Connection, 1),
+		discoChan   : make(chan Connection, 1),
+		errChan     : make(chan error, 1),
 		evtHandler  : evtHandler,
 		name        : pName,
 		netObjects  : make([]NetConnector, 0),
@@ -124,10 +126,10 @@ func NewProtocol(pName string, evtHandler EventHandler) *Protocol {
 			PERF_PROTO_COUNT, 
 			protoPerfNames,
 		),
-		rcvChan     : make(chan *Msg, 0),
+		rcvChan     : make(chan *Msg, 1),
 		sigMap      : make(map[uint16]MsgProcessor, 0),
 		syncObj     : lifecycle.New(),
-		timeoutChan : make(chan *TimeoutEvent, 0),
+		timeoutChan : make(chan *TimeoutEvent, 1),
 	}
 
 	newProto.evtHandler.Init(&newProto)
@@ -518,21 +520,34 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 
 	if !msg.isValid() {
 		this.perfs.Increment(PERF_PROTO_ERR_RCV_CHECKSUM)
-		this.onError(errBadChecksum)
+		this.errChan<- errBadChecksum
+		return
+	}
+
+	if msg.Len() > MAX_NET_MSG_LEN {
+		this.perfs.Increment(PERF_PROTO_ERR_MAX_MSG_SIZE)
+		err := errors.New(fmt.Sprintf(
+			"Msg exceeds max size (%d / %d). Dropping msg",
+			msg.Len(),
+			MAX_NET_MSG_LEN,
+		))
+
+		this.errChan<- err
+
 		return
 	}
 
 	msgCon := msg.Connection()
 	if msgCon == nil {
 		this.perfs.Increment(PERF_PROTO_ERR_RCV_CON_NIL)
-		this.onError(errConnectionNil)
+		this.errChan<- errConnectionNil
 		return
 	}
 
 	access := this.getAccess(msgCon)
 	if access < 1 {
 		this.perfs.Increment(PERF_PROTO_ERR_NO_ACCESS)
-		this.onError(errNoAccess)
+		this.errChan<- errNoAccess
 		return
 	}
 
@@ -546,10 +561,10 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 
 	if proc == nil {
 		this.perfs.Increment(PERF_PROTO_ERR_NO_PROVIDER)
-		this.onError(errors.New(fmt.Sprintf(
+		this.errChan<- errors.New(fmt.Sprintf(
 			"No valid message processor (sig %v). Dropping message", 
 			sig,
-		)))
+		))
 		go msgCon.Close()
 		return
 	}
@@ -557,22 +572,22 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	if GetMsgEncryptedFlag(msgHeader) {
 		if this.crypto == nil {
 			this.perfs.Increment(PERF_PROTO_ERR_NO_PROVIDER)
-			this.onError(errors.New(fmt.Sprintf(
+			this.errChan<- errors.New(fmt.Sprintf(
 				"Encryption flag set, but no encrpytion provider." +
 				"Dropping message (proto: %s)",
 				this.name,
-			)))
+			))
 			return
 		}
 
 		err := this.crypto.Decrypt(msg)
 		if err != nil {
 			this.perfs.Increment(PERF_PROTO_ERR_RCV_DECRYPT)
-			this.onError(errors.New(fmt.Sprintf(
+			this.errChan<- errors.New(fmt.Sprintf(
 				"Error decrypting message (proto: %s, err: %v)",
 				this.name,
 				err,
-			)))
+			))
 			return
 		}
 	}
@@ -580,22 +595,22 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	if GetMsgCompressedFlag(msgHeader) {
 		if this.compressor == nil {
 			this.perfs.Increment(PERF_PROTO_ERR_NO_PROVIDER)
-			this.onError(errors.New(fmt.Sprintf(
+			this.errChan<- errors.New(fmt.Sprintf(
 				"Compression flag set, but no compression provider."+
 				"Dropping message (proto: %s)",
 				this.name,
-			)))
+			))
 			return
 		}
 
 		err := this.compressor.Decompress(msg)
 		if err != nil {
 			this.perfs.Increment(PERF_PROTO_ERR_RCV_DECOMPRESS)
-			this.onError(errors.New(fmt.Sprintf(
+			this.errChan<- errors.New(fmt.Sprintf(
 				"Error decompressing message (proto: %s, err: %v)",
 				this.name,
 				err,
-			)))
+			))
 			return
 		}
 	}
@@ -604,11 +619,11 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	obj, err := proc.DeserializeMsg(msg, access)
 	if err != nil {
 		this.perfs.Increment(PERF_PROTO_ERR_DESERIALIZE)
-		this.onError(errors.New(fmt.Sprintf(
+		this.errChan<- errors.New(fmt.Sprintf(
 			"Error deserializing message (proto: %s, err: %v)",
 			this.name,
 			err,
-		)))
+		))
 	}
 
 	this.evtMutex.Lock()
@@ -640,7 +655,7 @@ func (this *Protocol) sendMsg(id uint32, sig uint16, obj interface{}) error {
 			id,
 		))
 
-		this.onError(err)
+		this.errChan<- err
 
 		return err
 	}
@@ -658,7 +673,7 @@ func (this *Protocol) sendMsg(id uint32, sig uint16, obj interface{}) error {
 			sig,
 		))
 
-		this.onError(err)
+		this.errChan<- err
 
 		return err
 	}
@@ -671,7 +686,20 @@ func (this *Protocol) sendMsg(id uint32, sig uint16, obj interface{}) error {
 			sig,
 		))
 		
-		this.onError(err)
+		this.errChan<- err
+
+		return err
+	}
+
+	if msg.Len() > MAX_NET_MSG_LEN {
+		this.perfs.Increment(PERF_PROTO_ERR_MAX_MSG_SIZE)
+		err := errors.New(fmt.Sprintf(
+			"Msg exceeds max size (%d / %d). Dropping msg",
+			msg.Len(),
+			MAX_NET_MSG_LEN,
+		))
+
+		this.errChan<- err
 
 		return err
 	}
@@ -679,16 +707,16 @@ func (this *Protocol) sendMsg(id uint32, sig uint16, obj interface{}) error {
 	if GetMsgCompressedFlag(msg.GetHeader()) {
 		if this.compressor == nil {
 			this.perfs.Increment(PERF_PROTO_ERR_NO_PROVIDER)
-			this.onError(errNoCompProvider)
+			this.errChan<- errNoCompProvider
 			return errNoCompProvider
 		}
 
 		err := this.compressor.Compress(msg)
 		if err != nil {
 			this.perfs.Increment(PERF_PROTO_ERR_SEND_COMPRESS)
-			this.onError(errors.New(fmt.Sprintf(
+			this.errChan<- errors.New(fmt.Sprintf(
 				"Error compressing data: %v", err,
-			)))
+			))
 			return err
 		}
 	}
@@ -696,16 +724,16 @@ func (this *Protocol) sendMsg(id uint32, sig uint16, obj interface{}) error {
 	if GetMsgEncryptedFlag(msg.GetHeader()) {
 		if this.crypto == nil {
 			this.perfs.Increment(PERF_PROTO_ERR_NO_PROVIDER)
-			this.onError(errNoCryptoProvider)
+			this.errChan<- errNoCryptoProvider
 			return errNoCryptoProvider
 		}
 
 		err := this.crypto.Encrypt(msg)
 		if err != nil {
 			this.perfs.Increment(PERF_PROTO_ERR_SEND_ENCRYPT)
-			this.onError(errors.New(fmt.Sprintf(
+			this.errChan<- errors.New(fmt.Sprintf(
 				"Error encrypting data: %v", err,
-			)))
+			))
 			return err
 		}
 	}

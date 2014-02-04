@@ -20,9 +20,8 @@ import(
 // AsJson aggregates and returns diagnostics information in json format.
 // Diagnostic information includes hostname, CPU count, environment data,
 // stack traces for all running goroutines, and memory allocation statistics.
-func AsJson(err interface{}) string {
-	data    := New(err)
-	json, _ := json.MarshalIndent(data, "", "    ")
+func AsJson(diagData *DiagData) string {
+	json, _ := json.MarshalIndent(diagData, "", "    ")
 	
 	return string(json)
 }

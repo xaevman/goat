@@ -17,6 +17,7 @@ import (
 	"github.com/xaevman/goat/core/goapp"
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/perf"
+	"github.com/xaevman/goat/prod/dbg"
 )
 
 // Application name.
@@ -24,7 +25,8 @@ const APP_NAME = "ChatSrv"
 
 // Default config options.
 const (
-	DEFAULT_ADDR = "127.0.0.1:8900"
+	DEFAULT_ADDR     = "127.0.0.1:8900"
+	DEFAULT_DBG_ADDR = "127.0.0.1:8910"
 )
 
 // Perf counters.
@@ -55,8 +57,11 @@ var perfs = perf.NewCounterSet(
 	perfNames,
 )
 
-// ChatSrv protocol instance.
-var proto = net.NewProtocol(APP_NAME, new(ChatSrv))
+// Protocol instances.
+var(
+	dbgProto = net.NewProtocol(APP_NAME + "Dbg", new(dbg.DbgSrv))
+	proto    = net.NewProtocol(APP_NAME, new(ChatSrv))
+)
 
 
 // main is the application entry point.

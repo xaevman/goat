@@ -21,6 +21,7 @@ import (
 
 // Stdlib imports.
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"runtime"
@@ -40,36 +41,101 @@ type DiagData struct {
 	Memory         *runtime.MemStats
 }
 
+
 // EnvData represents keyval pairs in the environment.
 type EnvData struct {
 	Vars map[string]string
 }
 
+// String pretty-prints the EnvData object.
+func (this *EnvData) String() string {
+	var buffer bytes.Buffer
+
+	for k, v := range this.Vars {
+		buffer.WriteString(fmt.Sprintf("%v = %v\n", k, v))
+	}
+
+	return buffer.String()
+}
+
+
 // SysData represents basic information about the system.
 type SysData struct {
-	Arch     string
-	CGOCalls int64
-	CPUCount int
-	Error    string
-	Hostname string
-	OS       string
+	Arch        string
+	CGOCalls    int64
+	CPUCount    int
+	Error       string
+	GoDebug     string
+	GoGC        string
+	GoMaxProcs  string
+	GoPath      string
+	GoRoot      string
+	GoTraceback string
+	Hostname    string
+	OS          string
+}
+
+// String pretty-prints the SysData object.
+func (this *SysData) String() string {
+	return fmt.Sprintf(
+		"Error:    %v\n"   +
+		"Hostname: %v\n"   +
+		"CPUCount: %v\n"   +
+		"CGOCalls: %v\n"   +
+		"GOOS:     %v\n"   +
+		"GOARCH:   %v",
+		this.Error,
+		this.Hostname,
+		this.CPUCount,
+		this.CGOCalls,
+		this.OS,
+		this.Arch,
+	)
 }
 
 // New is a helper function that creates and populates a new DiagData object and
 // returns a pointer to it.
-func New(err interface{}) *DiagData {
+func New() *DiagData {
 	data := new(DiagData)
 
 	// active stacks
-	buffer := make([]byte, TRACE_BUFFER_LEN_B)
-	count  := runtime.Stack(buffer, true)
-	data.FullStackTrace = string(buffer[:count])
+	data.FullStackTrace = NewFullStackTrace()
 
 	// call stack
-	count = runtime.Stack(buffer, false)
-	data.CallStack = string(buffer[:count])
+	data.CallStack = NewStackTrace()
 
 	// environtment
+	data.Environment = NewEnvData()
+
+	// memory
+	data.Memory = NewMemData()
+
+	// sys
+	data.System = NewSysData()
+
+	// perf
+	data.Perfs = perf.TakeSnapshot()
+
+	return data
+}
+
+// NewStackTrace dumps the current calling stack in string format.
+func NewStackTrace() string {
+	buffer := make([]byte, TRACE_BUFFER_LEN_B)
+	count  := runtime.Stack(buffer, false)	
+	return string(buffer[:count])
+}
+
+// NewFullStackTrace dumps stack traces for all active go routines.
+func NewFullStackTrace() string {
+	buffer := make([]byte, TRACE_BUFFER_LEN_B)
+	count  := runtime.Stack(buffer, true)
+	return string(buffer[:count])
+}
+
+// NewEnvData creates and populates a new EnvData object and returns
+// a pointer to it for use.
+func NewEnvData() *EnvData {
 	env     := os.Environ()
 	envData := EnvData {
 		Vars: make(map[string]string, len(env)),
@@ -80,30 +146,35 @@ func New(err interface{}) *DiagData {
 		envData.Vars[envParts[0]] = envParts[1]
 	}
 
-	data.Environment = &envData
+	return &envData
+}
 
-	// memory
+// NewMemData creates and populates a new runtime.MemStats object and
+// returns a pointer to it for use.
+func NewMemData() *runtime.MemStats {
 	stats := new(runtime.MemStats)
 	runtime.ReadMemStats(stats)
-	data.Memory = stats
+	return stats
+}
 
-	// sys
+// NewSysData creatse and populates a new SysData object and returns a
+// pointer to it for use.
+func NewSysData() *SysData {
 	hostname, _ := os.Hostname()
 
 	sys := SysData {
-		Arch:     runtime.GOARCH,
-		CGOCalls: runtime.NumCgoCall(),
-		CPUCount: runtime.NumCPU(),
-		Error:    fmt.Sprintf("%v", err),
-		Hostname: hostname,
-		OS:       runtime.GOOS,
+		Arch        : runtime.GOARCH,
+		CGOCalls    : runtime.NumCgoCall(),
+		CPUCount    : runtime.NumCPU(),
+		Hostname    : hostname,
+		GoDebug     : runtime.GODEBUG,
+		GoGC        : runtime.GOGC,
+		GoMaxProcs  : runtime.GOMAXPROCS,
+		GoPath      : runtime.GOPATH,
+		GoRoot      : runtime.GOROOT,
+		GoTraceback : runtime.GOTRACEBACK,
+		OS          : runtime.GOOS,
 	}
 
-	data.System = &sys
-
-	// perf
-	data.Perfs = perf.TakeSnapshot()
-
-	return data
+	return &sys
 }
-

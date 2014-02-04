@@ -206,7 +206,12 @@ func (this *tcpCon) Send(data []byte, timeoutSec int) {
 	select {
 	case this.writeChan <- data:
 	case <-time.After(time.Duration(timeoutSec) * time.Second):
-		sig := GetMsgSig(GetMsgHeader(data))
+		sig         := uint16(0)
+		header, err := GetMsgHeader(data)
+		if err == nil {
+			sig = GetMsgSig(header)
+		}
+
 		this.notifyTimeout(TIMEOUT_SEND, sig, this.id, data)
 	}
 }

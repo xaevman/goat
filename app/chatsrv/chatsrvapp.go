@@ -44,6 +44,9 @@ func (this *ChatSrvStart) PreInit() {
 func (this *ChatSrvStart) PostInit() {
 	addr, _ := config.GetVal("Net.SrvAddr", 0, DEFAULT_ADDR)
 	proto.ListenTcp(addr)
+
+	addr, _ = config.GetVal("Dbg.SrvAddr", 0, DEFAULT_DBG_ADDR)
+	dbgProto.ListenTcp(addr)
 }
 
 
