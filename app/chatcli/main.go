@@ -25,6 +25,7 @@ const APP_NAME = "ChatCli"
 var (
 	srvAddr  = "127.0.0.1:8900"
 	userName = "Anon"
+	useUdp   = false
 )
 
 // ChatCli protocol instance and event handler.

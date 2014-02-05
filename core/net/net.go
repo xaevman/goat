@@ -1,6 +1,6 @@
 //  ---------------------------------------------------------------------------
 //
-//  net.go
+//  stdnet.go
 //
 //  Copyright (c) 2014, Jared Chavez.
 //  All rights reserved.
@@ -16,8 +16,9 @@ package net
 import (
 	"errors"
 	"hash/crc32"
-	"net"
+	stdnet "net"
 	"sync"
+	"sync/atomic"
 )
 
 // Timeouts.
@@ -101,8 +102,8 @@ type Connection interface {
 	Close()
 	Id() uint32
 	Key() string
-	LocalAddr() net.Addr
-	RemoteAddr() net.Addr
+	LocalAddr() stdnet.Addr
+	RemoteAddr() stdnet.Addr
 	Send(data []byte, timeoutSec int)
 }
 
@@ -219,6 +220,11 @@ func GetMsgChecksum(header uint64) uint32 {
 	hash := uint32(header >> 32)
 
 	return hash
+}
+
+// NextNetID retrieves the next available network ID for use.
+func NextNetID() uint32 {
+	return atomic.AddUint32(&netId, 1)
 }
 
 // SetMsgChecksum sets bytes 4-8 to the computed crc32 hash of the payload

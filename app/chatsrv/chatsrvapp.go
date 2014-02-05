@@ -42,8 +42,11 @@ func (this *ChatSrvStart) PreInit() {
 // PostInit queries the config system to determine which bind address
 // the server should listen on.
 func (this *ChatSrvStart) PostInit() {
-	addr, _ := config.GetVal("Net.SrvAddr", 0, DEFAULT_ADDR)
+	addr, _ := config.GetVal("Net.SrvAddrTcp", 0, DEFAULT_TCP_ADDR)
 	proto.ListenTcp(addr)
+
+	addr, _ = config.GetVal("Net.SrvAddrUdp", 0, DEFAULT_UDP_ADDR)
+	proto.ListenUdp(addr)
 
 	addr, _ = config.GetVal("Dbg.SrvAddr", 0, DEFAULT_DBG_ADDR)
 	dbgProto.ListenTcp(addr)

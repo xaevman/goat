@@ -14,9 +14,8 @@ package net
 
 // Stdlib imports.
 import (
-	"net"
+	stdnet "net"
 	"sync"
-	"sync/atomic"
 )
 
 // BroadcastGroup represents a group of Connections that can be addressed
@@ -37,7 +36,7 @@ type BroadcastGroup struct {
 func NewBroadcastGroup(name string) *BroadcastGroup {
 	conGroup := BroadcastGroup{
 		conList: make(map[uint32]Connection, 0),
-		id:      atomic.AddUint32(&netId, 1),
+		id:      NextNetID(),
 		name:    name,
 	}
 
@@ -96,7 +95,7 @@ func (this *BroadcastGroup) Key() string {
 }
 
 // LocalAddr always returns nil for a BroadcastGroup.
-func (this *BroadcastGroup) LocalAddr() net.Addr {
+func (this *BroadcastGroup) LocalAddr() stdnet.Addr {
 	return nil
 }
 
@@ -105,7 +104,7 @@ func (this *BroadcastGroup) Name() string {
 }
 
 // RemoteAddr always returns nil for a BroadcastGroup.
-func (this *BroadcastGroup) RemoteAddr() net.Addr {
+func (this *BroadcastGroup) RemoteAddr() stdnet.Addr {
 	return nil
 }
 

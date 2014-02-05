@@ -24,6 +24,7 @@ import (
 import (
 	"errors"
 	"fmt"
+	stdnet "net"
 	"sync"
 )
 
@@ -93,14 +94,18 @@ var protoPerfNames = []string {
 // Common error messages.
 var (
 	errBadChecksum      = errors.New("Malformed message received " + 
-		"(checksum mismatch)")
+		"(checksum mismatch)",
+	)
 	errConnectionNil    = errors.New("Malformed message received " + 
-		"(Connection nil)")
+		"(Connection nil)",
+	)
 	errNoAccess         = errors.New("Access denied")
 	errNoCompProvider   = errors.New("Compression bit set, " +
-		"but no CompressionProvider registered.")
+		"but no CompressionProvider registered.",
+	)
 	errNoCryptoProvider = errors.New("Encryption bit set, " +
-		"but no CryptoProvider registered.")
+		"but no CryptoProvider registered.",
+	)
 )
 
 // perfName returns the name to be used for registering with the perf provider,
@@ -114,22 +119,23 @@ func perfName(baseName string) string {
 // Protocol object and returns a pointer to it for use.
 func NewProtocol(pName string, evtHandler EventHandler) *Protocol {
 	newProto := Protocol{
-		cliMap      : make(map[uint32]Connection, 0),
-		connectChan : make(chan Connection, QUEUE_BUFFERS),
-		discoChan   : make(chan Connection, QUEUE_BUFFERS),
-		errChan     : make(chan error, QUEUE_BUFFERS),
-		evtHandler  : evtHandler,
-		name        : pName,
-		netObjects  : make([]NetConnector, 0),
-		perfs       : perf.NewCounterSet(
+		cliMap       : make(map[uint32]Connection, 0),
+		connectChan  : make(chan Connection, QUEUE_BUFFERS),
+		discoChan    : make(chan Connection, QUEUE_BUFFERS),
+		errChan      : make(chan error, QUEUE_BUFFERS),
+		evtHandler   : evtHandler,
+		name         : pName,
+		netObjects   : make([]NetConnector, 0),
+		perfs        : perf.NewCounterSet(
 			perfName(pName), 
 			PERF_PROTO_COUNT, 
 			protoPerfNames,
 		),
-		rcvChan     : make(chan *Msg, QUEUE_BUFFERS),
-		sigMap      : make(map[uint16]MsgProcessor, 0),
-		syncObj     : lifecycle.New(),
-		timeoutChan : make(chan *TimeoutEvent, QUEUE_BUFFERS),
+		rcvChan      : make(chan *Msg, QUEUE_BUFFERS),
+		sigMap       : make(map[uint16]MsgProcessor, 0),
+		syncObj      : lifecycle.New(),
+		timeoutChan  : make(chan *TimeoutEvent, QUEUE_BUFFERS),
+		udpEndpoints : make(map[string]*udpEndpoint),
 	}
 
 	newProto.evtHandler.Init(&newProto)
@@ -143,24 +149,25 @@ func NewProtocol(pName string, evtHandler EventHandler) *Protocol {
 // providers which will be used as a part of the messaging pipeline for those
 // message types.
 type Protocol struct {
-	cliMap      map[uint32]Connection
-	cliMutex    sync.RWMutex
-	compressor  CompressionProvider
-	connectChan chan Connection
-	crypto      CryptoProvider
-	discoChan   chan Connection
-	errChan     chan error
-	evtHandler  EventHandler
-	evtMutex    sync.RWMutex
-	name        string
-	netObjects  []NetConnector
-	objMutex    sync.RWMutex
-	perfs       *perf.CounterSet
-	rcvChan     chan *Msg
-	security    AccessProvider
-	sigMap      map[uint16]MsgProcessor
-	syncObj     *lifecycle.Lifecycle
-	timeoutChan chan *TimeoutEvent
+	cliMap       map[uint32]Connection
+	cliMutex     sync.RWMutex
+	compressor   CompressionProvider
+	connectChan  chan Connection
+	crypto       CryptoProvider
+	discoChan    chan Connection
+	errChan      chan error
+	evtHandler   EventHandler
+	evtMutex     sync.RWMutex
+	name         string
+	netObjects   []NetConnector
+	objMutex     sync.RWMutex
+	perfs        *perf.CounterSet
+	rcvChan      chan *Msg
+	security     AccessProvider
+	sigMap       map[uint16]MsgProcessor
+	syncObj      *lifecycle.Lifecycle
+	timeoutChan  chan *TimeoutEvent
+	udpEndpoints map[string]*udpEndpoint
 }
 
 // AddSignature registers a message type signature and its associated message 
@@ -186,7 +193,7 @@ func (this *Protocol) AddSignature(proc MsgProcessor) {
 	this.sigMap[proc.Signature()] = proc
 
 	log.Info(
-		"Signature %d registered in protocol %s", 
+		"Signature %d registered in protocol %s",
 		proc.Signature(), 
 		this.name,
 	)
@@ -223,24 +230,44 @@ func (this *Protocol) DeleteSignature(proc MsgProcessor) {
 	)
 }
 
-// DialTcp attempts to create a tcpCli and connect it to the given
+// DialTcp attempts to create a TCP connection to the given
 // network address.
 func (this *Protocol) DialTcp(addr string) error {
-	tcpCli := newtcpCli(this)
+	conn, err := stdnet.Dial("tcp", addr)
+	if err != nil {
+		log.Error("%v", err)
+		return err
+	}
 
-	this.objMutex.Lock()
-	this.netObjects = append(this.netObjects, tcpCli)
-	this.objMutex.Unlock()
+	tCon := tcpCon {
+		discoChan   : this.discoChan,
+		id          : NextNetID(),
+		rcvChan     : this.rcvChan,
+		socket      : conn.(*stdnet.TCPConn),
+		syncObj     : lifecycle.New(),
+		timeoutChan : this.timeoutChan,
+		writeChan   : make(chan []byte, QUEUE_BUFFERS),
+	}
 
-	con, err := tcpCli.Start(addr)
+	tCon.startHandlers()
+	this.onConnect(&tCon)
+
+	return nil
+}
+
+// DialUdp attempts to create a UDP connection object for the given
+// UDP endpoint address.
+func (this *Protocol) DialUdp(addr string, socket *stdnet.UDPConn) error {
+	addrObj, err := stdnet.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return err
 	}
 
-	this.onConnect(con)
+	this.getUDPEndpoint(addrObj, socket)
 
-	return err
+	return nil
 }
+
 
 // GetAllConnections returns a slice containing all connections associated
 // with the protocol object.
@@ -278,6 +305,18 @@ func (this *Protocol) ListenTcp(addr string) error {
 
 	_, err := tcpSrv.Start(addr)
 	return err
+}
+
+// ListenUdp attempts to set up a udp listener instance at the given address.
+func (this *Protocol) ListenUdp(addr string) (*stdnet.UDPConn, error) {
+	this.objMutex.Lock()
+	defer this.objMutex.Unlock()
+
+	udpSrv         := newudpSrv(this)
+	this.netObjects = append(this.netObjects, udpSrv)
+
+	_, err := udpSrv.Start(addr)
+	return udpSrv.socket, err
 }
 
 // RegisterConnection registers a new connection object with this protocol.
@@ -378,6 +417,10 @@ func (this *Protocol) Shutdown() {
 		obj.Stop()
 	}
 
+	for k, _ := range this.cliMap {
+		this.cliMap[k].Close()
+	}
+
 	this.syncObj.Shutdown()
 }
 
@@ -406,6 +449,86 @@ func (this *Protocol) getAccess(con Connection) byte {
 	}
 
 	return access
+}
+
+// assertUDPAddr wraps a type assertion from net.Addr to *net.UDPAddr into a more
+// succinct API.
+func assertUDPAddr(addr stdnet.Addr) (*stdnet.UDPAddr, error) {
+	temp, ok := addr.(*stdnet.UDPAddr)
+	if !ok {
+		return nil, errors.New(
+			fmt.Sprintf(
+				"UDPAddr type assertion failed: %T", 
+				addr,
+			),
+		)	
+	}
+
+	return temp, nil
+}
+
+// getUDPEndpoint looks up and returns a pointer to the given address' 
+// udpEndpoint object, creating a new one if no such object exists yet.
+func (this *Protocol) getUDPEndpoint(
+	addr   stdnet.Addr, 
+	socket *stdnet.UDPConn,
+) (*udpEndpoint, error) {
+
+	this.objMutex.RLock()
+	obj, exist := this.udpEndpoints[addr.String()]
+	this.objMutex.RUnlock()
+
+	rAddrStr := addr.String()
+
+	if socket == nil {
+		rAddr, err := assertUDPAddr(addr)
+		if err != nil {
+			this.objMutex.Unlock()
+			return nil, err
+		}
+
+		udpSock, err := stdnet.DialUDP("udp", nil, rAddr)
+		if err != nil {
+			this.objMutex.Unlock()
+			return nil, err
+		}
+
+		socket = udpSock
+		addr   = nil
+	}
+
+	if !exist {
+		this.objMutex.Lock()
+
+		obj, exist = this.udpEndpoints[rAddrStr]
+		if exist {
+			this.objMutex.Unlock()
+			return obj, nil
+		}
+
+		obj             = new(udpEndpoint)
+		obj.discoChan   = this.discoChan
+		obj.id          = NextNetID()
+		obj.remoteAddr  = addr
+		obj.socket      = socket
+		obj.syncObj     = lifecycle.New()
+		obj.timeoutChan = this.timeoutChan
+		obj.writeChan   = make(chan []byte, QUEUE_BUFFERS)
+		obj.startHandlers()
+
+		this.udpEndpoints[rAddrStr] = obj
+		this.objMutex.Unlock()
+
+		log.Debug(
+			"UDPEndpoint %s->%s created", 
+			obj.socket.LocalAddr(), 
+			rAddrStr,
+		)
+
+		this.onConnect(obj)
+	}
+
+	return obj, nil
 }
 
 // handleEvents is launched within a new go routine when a new protocol is

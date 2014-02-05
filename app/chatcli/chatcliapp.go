@@ -35,12 +35,28 @@ func (this *ConsoleCliStart) PreInit() {
 	if len(os.Args) > 2 {
 		chatCli.username = os.Args[2]
 	}
+	if len(os.Args) > 3 {
+		useUdp = true
+	}
 }
 
 // PostInit connects to the remote server, closing the application if
 // a connection cannot be established.
 func (this *ConsoleCliStart) PostInit() {
-	err := proto.DialTcp(srvAddr)	
+	var err error
+
+	if useUdp {
+		sock, err := proto.ListenUdp("127.0.0.1:8902")
+		if err != nil {
+			goapp.Stop()
+			return
+		}
+
+		err = proto.DialUdp(srvAddr, sock)
+	} else {
+		err = proto.DialTcp(srvAddr)
+	}
+
 	if err != nil {
 		goapp.Stop()
 	}

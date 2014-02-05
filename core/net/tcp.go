@@ -20,8 +20,7 @@ import (
 
 // Stdlib imports.
 import (
-	"net"
-	"sync/atomic"
+	stdnet "net"
 	"time"
 )
 
@@ -29,65 +28,10 @@ import (
 const TCP_BUFFER_SIZE_B = 256
 
 
-// newtcpCli is a helper constructor function which returns a pointer to a
-// newly intialized tcpCli object for use.
-func newtcpCli(proto *Protocol) *tcpCli {
-	cli := tcpCli{
-		id       : atomic.AddUint32(&netId, 1),
-		protocol : proto,
-	}
-
-	return &cli
-}
-
-// tcpCli represents a TCP client object. The client object handles connecting
-// to server processes and manages basic IO and synchronization tasks, accepting
-// data from, and passing data up to, the net service's registered Protocol
-// objects.
-type tcpCli struct {
-	id        uint32
-	protocol  *Protocol
-	srvSocket *tcpCon
-}
-
-// Start connects the tcpCli object to a new server endpoint.
-func (this *tcpCli) Start(addr string) (Connection, error) {
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		log.Error("%v", err)
-		return nil, err
-	}
-
-	tCon := tcpCon{
-		discoChan   : this.protocol.discoChan,
-		id          : atomic.AddUint32(&netId, 1),
-		rcvChan     : this.protocol.rcvChan,
-		readChan    : make(chan []byte, QUEUE_BUFFERS),
-		socket      : conn.(*net.TCPConn),
-		syncObj     : lifecycle.New(),
-		timeoutChan : this.protocol.timeoutChan,
-		writeChan   : make(chan []byte, QUEUE_BUFFERS),
-	}
-
-	tCon.startHandlers()
-
-	this.srvSocket = &tCon
-
-	return &tCon, nil
-}
-
-// Stop closes the tcpCli's existing socket as well as all of the
-// client's go routines.
-func (this *tcpCli) Stop() {
-	this.srvSocket.Close()
-}
-
-
 // newtcpSrv is a helper function which initializes a new tcpSrv instance
 // and returns a pointer to it for use.
 func newtcpSrv(proto *Protocol) *tcpSrv {
 	srv := tcpSrv{
-		id       : atomic.AddUint32(&netId, 1),
 		protocol : proto,
 		syncObj  : lifecycle.New(),
 	}
@@ -96,12 +40,9 @@ func newtcpSrv(proto *Protocol) *tcpSrv {
 }
 
 // tcpSrv represents a TCP server object. The server object handles basic
-// communications, client synchronization, and error handling. Client code
-// only establishes a server listener via the server object. Sending and receiving
-// messages is done via Protocol objects registered with the net service.
+// communications, client synchronization, and error handling.
 type tcpSrv struct {
-	id       uint32
-	listener net.Listener
+	listener stdnet.Listener
 	protocol *Protocol
 	syncObj  *lifecycle.Lifecycle
 }
@@ -109,14 +50,14 @@ type tcpSrv struct {
 // Start initializes and starts the TCP server in a new goroutine,
 // on the given network address.
 func (this *tcpSrv) Start(addr string) (Connection, error) {
-	ln, err := net.Listen("tcp", addr)
+	ln, err := stdnet.Listen("tcp", addr)
 	if err != nil {
 		log.Error("%v", err)
 		return nil, err
 	}
 
 	this.listener = ln	
-	log.Info("Startup complete %v", addr)
+	log.Info("TCP start complete %v", addr)
 
 	go this.acceptConnections()
 
@@ -144,10 +85,9 @@ func (this *tcpSrv) acceptConnections() {
 
 		cli := tcpCon{
 			discoChan   : this.protocol.discoChan,
-			id          : atomic.AddUint32(&netId, 1),
+			id          : NextNetID(),
 			rcvChan     : this.protocol.rcvChan,
-			readChan    : make(chan []byte, QUEUE_BUFFERS),
-			socket      : cliCon.(*net.TCPConn),
+			socket      : cliCon.(*stdnet.TCPConn),
 			syncObj     : lifecycle.New(),
 			timeoutChan : this.protocol.timeoutChan,
 			writeChan   : make(chan []byte, QUEUE_BUFFERS),
@@ -169,8 +109,7 @@ type tcpCon struct {
 	key         string
 	nextMsg     *Msg
 	rcvChan     chan *Msg
-	readChan    chan []byte
-	socket      *net.TCPConn
+	socket      *stdnet.TCPConn
 	syncObj     *lifecycle.Lifecycle
 	timeoutChan chan *TimeoutEvent
 	writeChan   chan []byte
@@ -178,7 +117,6 @@ type tcpCon struct {
 
 // close shuts down the client TCP connection.
 func (this *tcpCon) Close() {
-	this.notifyDisco()
 	this.socket.Close()
 }
 
@@ -193,12 +131,12 @@ func (this *tcpCon) Key() string {
 }
 
 // LocalAddr returns the local endpoint address for this tcp connection.
-func (this *tcpCon) LocalAddr() net.Addr {
+func (this *tcpCon) LocalAddr() stdnet.Addr {
 	return this.socket.LocalAddr()
 }
 
 // RemoteAddr returns the remote endpoint's address for this tcp connection.
-func (this *tcpCon) RemoteAddr() net.Addr {
+func (this *tcpCon) RemoteAddr() stdnet.Addr {
 	return this.socket.RemoteAddr()
 }
 
@@ -264,12 +202,10 @@ func (this *tcpCon) handleReads() {
 		cpBuffer := make([]byte, count)
 		copy(cpBuffer, buffer[:count])
 
-		select {
-		case this.readChan<- cpBuffer:
-		case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
-		case <-this.syncObj.QueryShutdown():
-			return
-		}
+		for 
+			pending := this.buildMsg(cpBuffer)
+			pending != nil
+			pending = this.buildMsg(pending) {}
 
 		// a real error
 		if err != nil {
@@ -368,11 +304,6 @@ func (this *tcpCon) notifyTimeout(
 func (this *tcpCon) runCli() {
 	for this.syncObj.QueryRun() {
 		select {
-		case data := <-this.readChan:
-			for 
-				pending := this.buildMsg(data)
-				pending != nil
-				pending = this.buildMsg(pending) {}
 		case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
 		case <-this.syncObj.QueryShutdown():
 		}

@@ -320,8 +320,6 @@ func TestTCPSrv(t *testing.T) {
 
 	// log.DebugLogs = true
 
-	// cli
-
 	// srv
 	srvHandler   = new(PPEventSrv)
 	srvHandler.t = t
@@ -349,6 +347,57 @@ func TestTCPSrv(t *testing.T) {
 	srvproto.Shutdown()
 }
 
+// TestUdp performs the same ping/pong network test as runSimpleTcpTest
+// but uses UDP as the transport instead.
+func TestUdp(t *testing.T) {
+	srvAddr := "127.0.0.1:8901"
+	cliAddr := "127.0.0.1:8902"
+
+	srvHandler   = new(PPEventSrv)
+	srvHandler.t = t
+	srvproto     = NewProtocol("UdpSrvTest", srvHandler)
+	srvproto.AddSignature(pingMsgProc)
+	srvproto.AddSignature(pongMsgProc)
+	srvproto.SetAccessProvider(new(NoSecurity))
+
+	_, err := srvproto.ListenUdp(srvAddr)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	<-time.After(1 * time.Second)
+
+	cliHandler          = new(PPEventCli)
+	cliHandler.t        = t
+	cliHandler.msgCount = 100
+	cliproto            = NewProtocol("UdpCliTest", cliHandler)
+	cliproto.AddSignature(pingMsgProc)
+	cliproto.AddSignature(pongMsgProc)
+	cliproto.SetAccessProvider(new(NoSecurity))
+
+	cliSock, err := cliproto.ListenUdp(cliAddr)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	<-time.After(1 * time.Second)
+
+	waiter.Add(1)
+	err = cliproto.DialUdp(srvAddr, cliSock)
+	if err != nil {
+		waiter.Done()
+		t.Fatal(err.Error())
+	}
+
+	log.Info("Transmitting data...")
+
+	waiter.Wait()
+
+	<-time.After(1 * time.Second)
+
+	srvproto.Shutdown()
+}
+
 // runSimpleTcpTest spawns the given number of clients and asks them to send the
 // supplied number of messages, checking to make sure that the perf totals incrememnt
 // properly and do not indicate any failures.
@@ -369,6 +418,8 @@ func runSimpleTcpTest(cliCount, sendCount int, t *testing.T) {
 		waiter.Add(1)
 		cliproto.DialTcp(srvAddr)
 	}
+
+	log.Info("Transmitting data...")
 
 	waiter.Wait()
 
