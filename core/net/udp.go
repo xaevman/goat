@@ -16,6 +16,7 @@ package net
 import (
 	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/lib/lifecycle"
+	"github.com/xaevman/goat/lib/perf"
 )
 
 // Stdlib imports.
@@ -25,6 +26,34 @@ import (
 	stdnet "net"
 	"sync"
 	"time"
+)
+
+// Perf counters.
+const (
+	PERF_UDP_MSG_RECEIVE = iota
+	PERF_UDP_MSG_RECEIVE_BYTES
+	PERF_UDP_MSG_SEND
+	PERF_UDP_MSG_SEND_BYTES
+	PERF_UDP_MSG_TIMEOUT
+	PERF_UDP_SERVERS
+	PERF_UDP_COUNT
+)
+
+// Perf counter friendly names.
+var udpPerfNames = []string {
+	"MsgReceived",
+	"MsgReceivedBytes",
+	"MsgSent",
+	"MsgSentBytes",
+	"MsgTimeout",
+	"Servers",
+}
+
+// Global tcp perf object.
+var udpPerfs = perf.NewCounterSet(
+	"Module.Net.Udp",
+	PERF_UDP_COUNT,
+	udpPerfNames,
 )
 
 
@@ -73,6 +102,8 @@ func (this *udpSrv) Start(addr string) (Connection, error) {
 
 	log.Info("UDP start complete %v", addr)
 
+	udpPerfs.Increment(PERF_UDP_SERVERS)
+
 	return nil, nil
 }
 
@@ -83,6 +114,8 @@ func (this *udpSrv) Stop() {
 	this.mutex.Unlock()
 
 	this.socket.Close()
+
+	udpPerfs.Add(PERF_UDP_SERVERS, -1)
 }
 
 // handleReads accepts new packets coming into the UDP server, formats
@@ -150,6 +183,9 @@ func (this *udpSrv) isClosing() bool {
 
 // notifyMsg bubbles a received msg up to the parent object.
 func (this *udpSrv) notifyMsg(msg *Msg) {
+	udpPerfs.Increment(PERF_UDP_MSG_RECEIVE)
+	udpPerfs.Add(PERF_UDP_MSG_RECEIVE_BYTES, int64(msg.Len()))
+
 	select {
 	case this.proto.rcvChan<- msg:
 	case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
@@ -242,6 +278,10 @@ func (this *udpEndpoint) handleWrites() {
 				this.notifyDisco()
 				return
 			}
+
+			udpPerfs.Increment(PERF_UDP_MSG_SEND)
+			udpPerfs.Add(PERF_UDP_MSG_SEND_BYTES, int64(count))
+
 		case <-time.After(QUEUE_TIMEOUT_SEC * time.Second):
 		case <-this.syncObj.QueryShutdown():
 		}
@@ -274,6 +314,8 @@ func (this *udpEndpoint) notifyTimeout(
 	id   uint32, 
 	data interface{},
 ) {
+	udpPerfs.Increment(PERF_UDP_MSG_TIMEOUT)
+
 	if this.timeoutChan == nil {
 		return
 	}

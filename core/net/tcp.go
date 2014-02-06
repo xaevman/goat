@@ -16,12 +16,45 @@ package net
 import (
 	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/lib/lifecycle"
+	"github.com/xaevman/goat/lib/perf"
 )
 
 // Stdlib imports.
 import (
 	stdnet "net"
 	"time"
+)
+
+// Perf counters.
+const (
+	PERF_TCP_CONNECTIONS = iota
+	PERF_TCP_DISCO
+	PERF_TCP_MSG_RECEIVE
+	PERF_TCP_MSG_RECEIVE_BYTES
+	PERF_TCP_MSG_SEND
+	PERF_TCP_MSG_SEND_BYTES
+	PERF_TCP_MSG_TIMEOUT
+	PERF_TCP_SERVERS
+	PERF_TCP_COUNT
+)
+
+// Perf counter friendly names.
+var tcpPerfNames = []string {
+	"Connections",
+	"Disconnect",
+	"MsgReceived",
+	"MsgReceivedBytes",
+	"MsgSent",
+	"MsgSentBytes",
+	"MsgTimeout",
+	"Servers",
+}
+
+// Global tcp perf object.
+var tcpPerfs = perf.NewCounterSet(
+	"Module.Net.Tcp",
+	PERF_TCP_COUNT,
+	tcpPerfNames,
 )
 
 // TCP Buffer size for reading data off the line.
@@ -61,6 +94,8 @@ func (this *tcpSrv) Start(addr string) (Connection, error) {
 
 	go this.acceptConnections()
 
+	tcpPerfs.Increment(PERF_TCP_SERVERS)
+
 	return nil, nil
 }
 
@@ -68,6 +103,8 @@ func (this *tcpSrv) Start(addr string) (Connection, error) {
 func (this *tcpSrv) Stop() {
 	go this.syncObj.Shutdown()
 	this.listener.Close()
+
+	tcpPerfs.Add(PERF_TCP_SERVERS, -1)
 }
 
 // acceptConnections handles accepting connections from new clients.
@@ -96,6 +133,8 @@ func (this *tcpSrv) acceptConnections() {
 		this.protocol.connectChan <- &cli
 
 		cli.startHandlers()
+
+		tcpPerfs.Increment(PERF_TCP_CONNECTIONS)
 	}
 
 	this.syncObj.ShutdownComplete()
@@ -224,6 +263,9 @@ func (this *tcpCon) handleWrites() {
 		select {
 		case data := <-this.writeChan:
 			count, err = this.socket.Write(data)
+			tcpPerfs.Increment(PERF_TCP_MSG_SEND)
+			tcpPerfs.Add(PERF_TCP_MSG_SEND_BYTES, int64(len(data)))
+
 			// disco
 			if count < 1 {
 				this.notifyDisco()
@@ -241,6 +283,8 @@ func (this *tcpCon) handleWrites() {
 
 // notifyDisco bubbles a disco event up to the tcpCon's parent object.
 func (this *tcpCon) notifyDisco() {
+	tcpPerfs.Add(PERF_TCP_CONNECTIONS, -1)
+
 	this.syncObj.Shutdown()
 
 	if this.discoChan == nil {
@@ -258,6 +302,9 @@ func (this *tcpCon) notifyDisco() {
 
 // notifyMsg bubbles a received msg up to the tcpCon's parent object.
 func (this *tcpCon) notifyMsg(msg *Msg) {
+	tcpPerfs.Increment(PERF_TCP_MSG_RECEIVE)
+	tcpPerfs.Add(PERF_TCP_MSG_RECEIVE_BYTES, int64(msg.Len()))
+
 	if this.rcvChan == nil {
 		return
 	}
@@ -278,6 +325,8 @@ func (this *tcpCon) notifyTimeout(
 	id   uint32, 
 	data interface{},
 ) {
+	tcpPerfs.Increment(PERF_TCP_MSG_TIMEOUT)
+
 	if this.timeoutChan == nil {
 		return
 	}
