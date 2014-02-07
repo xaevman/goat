@@ -21,11 +21,12 @@ import (
 import (
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"runtime"
 )
 
-// Child pages.
-var childUris = []*UriInfo {
+// Diag pages.
+var diagUris = []*UriInfo {
 	&UriInfo { path: "/diag/blocked", link: "blocked", handler: uriBlocked },
 	&UriInfo { path: "/diag/env",     link: "env",     handler: uriEnv     },
 	&UriInfo { path: "/diag/mem",     link: "mem",     handler: uriMem     },
@@ -49,22 +50,12 @@ func InitWebDiag() {
 
 	http.HandleFunc("/diag", uriRoot)
 
-	for i := range childUris {
-		uri := childUris[i]
+	for i := range diagUris {
+		uri := diagUris[i]
 		http.HandleFunc(uri.path, uri.handler)
 	}
 }
 
-
-// uriRoot is the handler for the base /diag uri.
-func uriRoot(w http.ResponseWriter, req *http.Request) {
-	for i := range childUris {
-		uri := childUris[i]
-		fmt.Fprint(w, "<br>")
-		fmt.Fprintf(w, "<a href=%s>%s</a>", uri.path, uri.link)
-		fmt.Fprint(w, "<br>")
-	}
-}
 
 // uriBlocked is the handler for the /diag/blocked uri.
 func uriBlocked(w http.ResponseWriter, req *http.Request) {
@@ -78,12 +69,6 @@ func uriEnv(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "%v", data)
 }
 
-// uriStack is the handler for the /diag/stack uri.
-func uriStack(w http.ResponseWriter, req *http.Request) {
-	data := NewFullStackTrace()
-	fmt.Fprint(w, data)
-}
-
 // uriMem is the handler for the /diag/mem uri.
 func uriMem(w http.ResponseWriter, req *http.Request) {
 	data := NewMemData()
@@ -94,6 +79,30 @@ func uriMem(w http.ResponseWriter, req *http.Request) {
 func uriPerf(w http.ResponseWriter, req *http.Request) {
 	data := perf.TakeSnapshot()
 	fmt.Fprint(w, data.StringBrief())
+}
+
+// uriRoot is the handler for the base /diag uri.
+func uriRoot(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(w, "<div class='header' />")
+
+	fmt.Fprintln(w, "<h1>Debug</h1><hr>")
+	fmt.Fprintf(w, "<div class='diagLinks'>")
+	for i := range diagUris {
+		uri := diagUris[i]
+		fmt.Fprintf(w, "<a href=%s>%s</a><br>", uri.path, uri.link)
+	}
+	fmt.Fprintf(w, "</div>")
+
+	fmt.Fprintln(w, "<br><h1>Profiler</h1><hr>")
+	fmt.Fprint(w, "<a href=/debug/pprof/>pprof</a><br>")
+
+	fmt.Fprintf(w, "<div class='footer' />")
+}
+
+// uriStack is the handler for the /diag/stack uri.
+func uriStack(w http.ResponseWriter, req *http.Request) {
+	data := NewFullStackTrace()
+	fmt.Fprint(w, data)
 }
 
 // uriSys is the handler for the /diag/sys uri.
