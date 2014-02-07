@@ -30,31 +30,31 @@ import (
 
 // Built in performance timers.
 const (
-	PERF_APP_TIMER_PRE_INIT = iota
-	PERF_APP_TIMER_POST_INIT
-	PERF_APP_TIMER_PRE_SHUTDOWN
-	PERF_APP_TIMER_POST_SHUTDOWN
-	PERF_APP_TIMER_RUNTIME
-	PERF_APP_TIMER_PRE_LOOP
-	PERF_APP_TIMER_POST_LOOP
-	PERF_APP_TIMER_ON_HEARTBEAT
+	PERF_APP_MSGPUMP = iota
 	PERF_APP_TIMER_LOOP_IDLE
-	PERF_APP_MSGPUMP
+	PERF_APP_TIMER_ON_HEARTBEAT
+	PERF_APP_TIMER_POST_INIT
+	PERF_APP_TIMER_PRE_INIT
+	PERF_APP_TIMER_POST_LOOP
+	PERF_APP_TIMER_PRE_LOOP
+	PERF_APP_TIMER_POST_SHUTDOWN
+	PERF_APP_TIMER_PRE_SHUTDOWN
+	PERF_APP_TIMER_RUNTIME
 	PERF_APP_COUNT
 )
 
 // Built in performance timer names.
 var appTimerNames = []string {
-	"TimerPreInitMs",
-	"TimerPostInitMs",
-	"TimerPreShutdownMs",
-	"TimerPostShutdownMs",
-	"TimerRuntime",
-	"TimerPreLoopMs",
-	"TimerPostLoopMs",
-	"TimerOnHeartbeatMs",
-	"TimerLoopIdleMs",
 	"ManualMsgPump",
+	"TimerLoopIdleMs",
+	"TimerOnHeartbeatMs",
+	"TimerPostInitMs",
+	"TimerPreInitMs",
+	"TimerPostLoopMs",
+	"TimerPreLoopMs",
+	"TimerPostShutdownMs",
+	"TimerPreShutdownMs",
+	"TimerRuntime",
 }
 
 // Application properties.

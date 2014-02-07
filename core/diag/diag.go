@@ -26,6 +26,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -60,8 +61,21 @@ type EnvData struct {
 func (this *EnvData) String() string {
 	var buffer bytes.Buffer
 
-	for k, v := range this.Vars {
-		buffer.WriteString(fmt.Sprintf("%v = %v\n", k, v))
+	count := 0
+	sKeys := make([]string, len(this.Vars))
+	for k, _ := range this.Vars {
+		sKeys[count] = k
+		count++
+	}
+
+	sort.Strings(sKeys)
+
+	for i := range sKeys {
+		buffer.WriteString(fmt.Sprintf(
+			"%v = %v\n", 
+			sKeys[i], 
+			this.Vars[sKeys[i]],
+		))
 	}
 
 	return buffer.String()

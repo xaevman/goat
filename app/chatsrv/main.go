@@ -26,6 +26,7 @@ const APP_NAME = "ChatSrv"
 // Default config options.
 const (
 	DEFAULT_DBG_ADDR = "127.0.0.1:8910"
+	DEFAULT_DIAG_URI = "127.0.0.1:8911"
 	DEFAULT_TCP_ADDR = "127.0.0.1:8900"
 	DEFAULT_UDP_ADDR = "127.0.0.1:8901"
 )

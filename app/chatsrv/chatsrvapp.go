@@ -15,6 +15,7 @@ package main
 // External imports.
 import(
 	"github.com/xaevman/goat/core/config"
+	"github.com/xaevman/goat/core/diag"
 	"github.com/xaevman/goat/core/log"
 	"github.com/xaevman/goat/core/net"
 	"github.com/xaevman/goat/lib/perf"
@@ -23,6 +24,7 @@ import(
 // Stdlib imports.
 import(
 	"fmt"
+	"net/http"
 )
 
 
@@ -48,8 +50,16 @@ func (this *ChatSrvStart) PostInit() {
 	addr, _ = config.GetVal("Net.SrvAddrUdp", 0, DEFAULT_UDP_ADDR)
 	proto.ListenUdp(addr)
 
-	addr, _ = config.GetVal("Dbg.SrvAddr", 0, DEFAULT_DBG_ADDR)
+	addr, _ = config.GetVal("Debug.SrvAddr", 0, DEFAULT_DBG_ADDR)
 	dbgProto.ListenTcp(addr)
+
+	addr, _ = config.GetVal("Net.SrvAddrHttp", 0, DEFAULT_DIAG_URI)
+
+	if addr != "" {
+		go http.ListenAndServe(addr, nil)
+	}
+
+	diag.InitWebDiag()
 }
 
 

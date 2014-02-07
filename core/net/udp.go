@@ -235,7 +235,11 @@ func (this *udpEndpoint) LocalAddr() stdnet.Addr {
 
 // RemoteAddr returns the remote endpoint's address.
 func (this *udpEndpoint) RemoteAddr() stdnet.Addr {
-	return this.socket.LocalAddr()
+	if this.remoteAddr == nil {
+		return this.socket.RemoteAddr()
+	}
+
+	return this.remoteAddr
 }
 
 // Send takes raw data and sends it to the endpoint's write go routine.

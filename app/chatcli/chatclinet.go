@@ -149,7 +149,7 @@ func (this *ChatCli) OnReceive(msg interface{}) {
 	case chat.MSG_SUB_JOIN_CHANNEL:
 		this.onJoinChannelMsg(chatMsg)
 	case chat.MSG_SUB_LEAVE_CHANNEL:
-		return
+		this.onLeaveChannelMsg(chatMsg)
 	case chat.MSG_SUB_SET_NAME:
 		this.printChatMsg(chatMsg)
 	}
@@ -223,7 +223,7 @@ func (this *ChatCli) onJoinChannelMsg(msg *chat.Msg) {
 
 // onLeaveChannel is called when a MSG_SUB_LEAVE_CHANNEL message is
 // received from the server.
-func (this *ChatCli) onLeaveChannel(msg *chat.Msg) {
+func (this *ChatCli) onLeaveChannelMsg(msg *chat.Msg) {
 	delete(this.chanIdMap,   msg.ChannelId)
 	delete(this.chanNameMap, msg.From)
 }
@@ -326,6 +326,16 @@ func (this *ChatCli) sendJoinChannel(channelName string) {
 	joinMsg.Text    = channelName
 
 	this.send(joinMsg)
+}
+
+// sendLeaveChannel sends a message to the server requesting to be
+// removed from the given channel.
+func (this *ChatCli) sendLeaveChannel(channelName string) {
+	leaveMsg        := new(chat.Msg)
+	leaveMsg.Subtype = chat.MSG_SUB_LEAVE_CHANNEL
+	leaveMsg.Text    = channelName
+
+	this.send(leaveMsg)
 }
 
 // SendSetName sets this client's display name on the server.

@@ -195,9 +195,9 @@ func (this *ChatSrv) handleDisco(con net.Connection) {
 }
 
 // handleJoinChan adds a user to a channel, if not already presents and they
-// have required rights, and then calls accounceUser().
+// have required rights, and then calls accounceUserJoin().
 func (this *ChatSrv) handleJoinChan(msg *chat.Msg) {
-	ch := this.createChannel(strings.TrimSpace(msg.Text))
+	ch     := this.createChannel(strings.TrimSpace(msg.Text))
 	userId := msg.FromId
 
 	con := ch.GetConnection(userId)
@@ -211,6 +211,18 @@ func (this *ChatSrv) handleJoinChan(msg *chat.Msg) {
 	msg.From      = ch.Name()
 
 	this.send(userId, msg)
+}
+
+// handleLeaveChan removes a user from a channel if it exists, and then calls
+// announceUserLeave().
+func (this *ChatSrv) handleLeaveChan(msg *chat.Msg) {
+	ch := this.chanNameMap[strings.TrimSpace(msg.Text)]
+	if ch == nil {
+		return
+	}
+
+	ch.RemoveConnection(msg.FromId)
+	this.announceUserLeave(ch, msg.FromId)
 }
 
 // handleMsg reads new messages and redistributes them to their appropriate
@@ -230,7 +242,7 @@ func (this *ChatSrv) handleMsg(msg *chat.Msg) {
 		this.handleJoinChan(msg)
 	case chat.MSG_SUB_LEAVE_CHANNEL:
 		perfs.Increment(PERF_CHATSRV_LEAVE_CHAN)
-		return
+		this.handleLeaveChan(msg)
 	case chat.MSG_SUB_SET_NAME:
 		perfs.Increment(PERF_CHATSRV_SET_NAME)
 		this.handleSetName(msg)

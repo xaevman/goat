@@ -19,7 +19,7 @@ import (
 
 // Stdlib imports.
 import (
-	"os"
+	"flag"
 )
 
 // ConsoleCliStart is a goapp.AppStarter implementation which runs a
@@ -29,15 +29,10 @@ type ConsoleCliStart struct {}
 // PreInit parses command line arguments to set the target server
 // address and start-up username.
 func (this *ConsoleCliStart) PreInit() {
-	if len(os.Args) > 1 {
-		srvAddr = os.Args[1]
-	}
-	if len(os.Args) > 2 {
-		chatCli.username = os.Args[2]
-	}
-	if len(os.Args) > 3 {
-		useUdp = true
-	}
+	flag.StringVar(&srvAddr, "s", srvAddr, "remote server address")
+	flag.StringVar(&chatCli.username, "u", userName, "chat username")
+	flag.BoolVar(&useUdp, "udp", false, "enable UDP transport")
+	flag.Parse()
 }
 
 // PostInit connects to the remote server, closing the application if

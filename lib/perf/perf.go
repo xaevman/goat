@@ -15,6 +15,7 @@ package perf
 // Stdlib imports.
 import (
 	"bytes"
+	"sort"
 	"sync"
 )
 
@@ -46,10 +47,17 @@ func GetAllCounterSets() []*CounterSet {
 
 	cursor      := 0
 	counterList := make([]*CounterSet, len(perfMap))
+	sKeys       := make([]string, len(perfMap))
 
 	for k, _ := range perfMap {
-		counterList[cursor] = perfMap[k]
+		sKeys[cursor] = k
 		cursor++
+	}
+
+	sort.Strings(sKeys)
+
+	for i := range sKeys {
+		counterList[i] = perfMap[sKeys[i]]
 	}
 
 	return counterList
