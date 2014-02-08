@@ -132,12 +132,15 @@ func (this *ChatCli) OnError(err error) {
 // OnReceive performs a type assertion on incoming messages, and then
 // dispatches them by sub-type to the appropriate message handling
 // functions.
-func (this *ChatCli) OnReceive(msg interface{}) {
+func (this *ChatCli) OnReceive(msg interface{}, fromId uint32, access byte) {
 	chatMsg, ok := msg.(*chat.Msg)
 	if !ok {
 		log.Error("Invalid object type received (%T)", msg)
 		return
 	}
+
+	chatMsg.FromId = fromId
+	chatMsg.Access = access
 
 	switch chatMsg.Subtype {
 	case chat.MSG_SUB_CHAT:

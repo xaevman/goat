@@ -71,7 +71,7 @@ func (this *ChatSrv) OnError(err error) {
 // OnReceive logs debugging information about incoming messages, performs
 // a type assertion on the incoming message object, and then passes it to
 // the message handler.
-func (this *ChatSrv) OnReceive(msg interface{}) {
+func (this *ChatSrv) OnReceive(msg interface{}, fromId uint32, access byte) {
 	log.Debug("%v", msg)
 
 	chatMsg, ok := msg.(*chat.Msg)
@@ -79,6 +79,9 @@ func (this *ChatSrv) OnReceive(msg interface{}) {
 		log.Error("Invalid type received: %T", msg)
 		return
 	}
+
+	chatMsg.FromId = fromId
+	chatMsg.Access = access
 
 	this.handleMsg(chatMsg)
 }

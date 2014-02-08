@@ -70,12 +70,15 @@ func (this *DbgSrv) OnError(err error) {
 
 // OnReceive makes sure that new incoming messages pass a type assertion
 // and then routes the message to the appropriate command handler.
-func (this *DbgSrv) OnReceive(msg interface{}) {
+func (this *DbgSrv) OnReceive(msg interface{}, fromId uint32, access byte) {
 	cmdMsg, ok := msg.(*CmdMsg)
 	if !ok {
 		log.Error("Cannot handle message type %T", cmdMsg)
 		return
 	}
+
+	cmdMsg.FromId = fromId
+	cmdMsg.Access = access
 
 	switch cmdMsg.Cmd {
 	default:

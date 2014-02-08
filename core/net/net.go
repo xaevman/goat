@@ -12,11 +12,17 @@
 
 package net
 
+// External imports.
+import (
+	"github.com/xaevman/goat/core/log"
+)
+
 // Stdlib imports.
 import (
 	"errors"
 	"hash/crc32"
 	stdnet "net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 )
@@ -144,7 +150,7 @@ type EventHandler interface {
 	OnConnect(con Connection)
 	OnDisconnect(con Connection)
 	OnError(err error)
-	OnReceive(msg interface{})
+	OnReceive(msg interface{}, fromId uint32, access byte)
 	OnShutdown()
 	OnTimeout(timeout *TimeoutEvent)
 }
@@ -220,6 +226,17 @@ func GetMsgChecksum(header uint64) uint32 {
 	hash := uint32(header >> 32)
 
 	return hash
+}
+
+// InitHttpSrv initializes the http server. Register handlers as is normal
+// for the net/http service.
+func InitHttpSrv(addr string) {
+	go func() {
+		err := http.ListenAndServe(addr, nil)
+		if err != nil {
+			log.Error(err.Error())
+		}
+	}()
 }
 
 // NextNetID retrieves the next available network ID for use.

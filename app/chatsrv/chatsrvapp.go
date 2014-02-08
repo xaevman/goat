@@ -24,7 +24,6 @@ import(
 // Stdlib imports.
 import(
 	"fmt"
-	"net/http"
 )
 
 
@@ -54,12 +53,10 @@ func (this *ChatSrvStart) PostInit() {
 	dbgProto.ListenTcp(addr)
 
 	addr, _ = config.GetVal("Net.SrvAddrHttp", 0, DEFAULT_DIAG_URI)
-
 	if addr != "" {
-		go http.ListenAndServe(addr, nil)
+		net.InitHttpSrv(addr)
+		diag.InitWebDiag()
 	}
-
-	diag.InitWebDiag()
 }
 
 

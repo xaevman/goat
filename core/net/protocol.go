@@ -748,7 +748,7 @@ func (this *Protocol) rcvMsg(msg *Msg) {
 	}
 
 	this.evtMutex.Lock()
-	this.evtHandler.OnReceive(obj)
+	this.evtHandler.OnReceive(obj, msg.From(), access)
 	this.evtMutex.Unlock()
 
 	this.perfs.Increment(PERF_PROTO_RCV_OK)

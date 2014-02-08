@@ -113,7 +113,7 @@ func (this *PPEventSrv) OnTimeout(timeout *TimeoutEvent) {
 // OnReceive performs a type assertion on the incoming message, logs
 // the message, and - if the received message was a ping - returns a
 // pong message back to the sender.
-func (this *PPEventSrv) OnReceive(msg interface{}) {
+func (this *PPEventSrv) OnReceive(msg interface{}, fromId uint32, access byte) {
 	pingMsg, ok := msg.(*PPMsg)
 	if !ok {
 	    this.t.Fatalf("unexpected type %T", msg)
@@ -178,7 +178,7 @@ func (this *PPEventCli) OnTimeout(timeout *TimeoutEvent) {
 // OnReceive performs a type assertion on the incoming message, logs
 // the message, and - if the received message was a ping - returns a
 // pong message back to the sender.
-func (this *PPEventCli) OnReceive(msg interface{}) {
+func (this *PPEventCli) OnReceive(msg interface{}, fromId uint32, access byte) {
 	pingMsg, ok := msg.(*PPMsg)
 	if !ok {
 	    this.t.Fatalf("unexpected type %T", msg)
