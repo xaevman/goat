@@ -12,19 +12,19 @@ package dbg
 
 // External imports.
 import (
-	"github.com/xaevman/goat/core/net"
-	"github.com/xaevman/goat/lib/buffer"
+    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/lib/buffer"
 )
 
 // Stdlin imports.
 import (
-	"errors"
-	"fmt"
+    "errors"
+    "fmt"
 )
 
 // Generated imports.
 import (
-	"github.com/xaevman/goat/prod"
+    "github.com/xaevman/goat/prod"
 )
 
 // CmdMsgHandler is an empty function container.
@@ -39,48 +39,48 @@ func (this *CmdMsgHandler) Init(proto *net.Protocol) {}
 // DeserializeMsg is called by the protocol after an incoming network message has been 
 // validated, decrypted, and uncompressed.
 func (this *CmdMsgHandler) DeserializeMsg(msg *net.Msg, access byte) (interface{}, error) {
-	var err error
+    var err error
 
-	cursor := 0
-	data   := msg.GetPayload()
-	nMsg   := new(CmdMsg)
-	
-	nMsg.Cmd, err = buffer.ReadByte(data, &cursor)
-	if err != nil { return nil, err }
-	
-	nMsg.Data, err = buffer.ReadString(data, &cursor)
-	if err != nil { return nil, err }
-	
-	return nMsg, nil
+    cursor := 0
+    data   := msg.GetPayload()
+    nMsg   := new(CmdMsg)
+    
+    nMsg.Cmd, err = buffer.ReadByte(data, &cursor)
+    if err != nil { return nil, err }
+    
+    nMsg.Data, err = buffer.ReadString(data, &cursor)
+    if err != nil { return nil, err }
+    
+    return nMsg, nil
 }
 
 // SerializeMsg is called by the protocol after a CmdMsg object has been validated,
 // compressed, and encrypted, in order to prepare a network message for transmission.
 func (this *CmdMsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
-	cursor      := 0
-	nMsg, ok := data.(*CmdMsg)
-	if !ok {
-		return nil, errors.New(fmt.Sprintf("Cannot serialize type %T", data))
-	}
+    cursor      := 0
+    nMsg, ok := data.(*CmdMsg)
+    if !ok {
+        return nil, errors.New(fmt.Sprintf("Cannot serialize type %T", data))
+    }
 
-	dataLen := 0
-	
-	dataLen += buffer.LenByte()
-	dataLen += buffer.LenString(nMsg.Data)
+    dataLen := 0
+    
+    dataLen += buffer.LenByte()
+    dataLen += buffer.LenString(nMsg.Data)
 
-	dataBuffer := make([]byte, dataLen)
-	
-	buffer.WriteByte(nMsg.Cmd, dataBuffer, &cursor)
-	buffer.WriteString(nMsg.Data, dataBuffer, &cursor)
+    dataBuffer := make([]byte, dataLen)
+    
+    buffer.WriteByte(nMsg.Cmd, dataBuffer, &cursor)
+    buffer.WriteString(nMsg.Data, dataBuffer, &cursor)
 
-	msg := net.NewMsg()
-	msg.SetMsgType(this.Signature())
-	msg.SetPayload(dataBuffer)
+    msg := net.NewMsg()
+    msg.SetMsgType(this.Signature())
+    msg.SetPayload(dataBuffer)
 
-	return msg, nil
+    return msg, nil
 }
 
 // Signature returns CmdMsg's network signature (prod.DBG_MSG).
 func (this *CmdMsgHandler) Signature() uint16 {
-	return prod.DBG_MSG
+    return prod.DBG_MSG
 }

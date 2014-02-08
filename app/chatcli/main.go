@@ -14,8 +14,8 @@ package main
 
 // External imports.
 import (
-	"github.com/xaevman/goat/core/goapp"
-	"github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/core/goapp"
+    "github.com/xaevman/goat/core/net"
 )
 
 // Application name.
@@ -23,21 +23,21 @@ const APP_NAME = "ChatCli"
 
 // Config options.
 var (
-	srvAddr  = "127.0.0.1:8900"
-	userName = "Anon"
-	useUdp   = false
+    srvAddr  = "127.0.0.1:8900"
+    userName = "Anon"
+    useUdp   = false
 )
 
 // ChatCli protocol instance and event handler.
 var (
-	chatCli = new(ChatCli)
-	proto   = net.NewProtocol(APP_NAME, chatCli)
+    chatCli = new(ChatCli)
+    proto   = net.NewProtocol(APP_NAME, chatCli)
 )
 
 // main is the application entry point.
 func main() {
-	goapp.SetAppStarter(new(ConsoleCliStart))
+    goapp.SetAppStarter(new(ConsoleCliStart))
 
-	stopChan := goapp.Start(APP_NAME)
-	<-stopChan
+    stopChan := goapp.Start(APP_NAME)
+    <-stopChan
 }

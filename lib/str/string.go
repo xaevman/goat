@@ -14,9 +14,9 @@ package str
 
 // Stdlib imports.
 import (
-	"bytes"
-	"strconv"
-	"strings"
+    "bytes"
+    "strconv"
+    "strings"
 )
 
 
@@ -24,88 +24,88 @@ import (
 // and splits the string by that separator, also trimming whitespace and
 // dropping any resulting empty strings.
 func DelimToStrArray(data, sep string) []string {
-	temp := make([]string, 0)
-	vals := strings.Split(data, sep) 
+    temp := make([]string, 0)
+    vals := strings.Split(data, sep) 
 
-	for i := range vals {
-		cleanVal := strings.TrimSpace(vals[i])
-		if len(cleanVal) > 0 {
-			temp = append(temp, cleanVal)
-		}
-	}
+    for i := range vals {
+        cleanVal := strings.TrimSpace(vals[i])
+        if len(cleanVal) > 0 {
+            temp = append(temp, cleanVal)
+        }
+    }
 
-	return temp
+    return temp
 }
 
 // IntArrayToList takes an array of ints and transforms them into a 
 // single string, delimited by a specified separator.
 func IntArrayToList(items []int, sep string) string {
-	var buffer bytes.Buffer
+    var buffer bytes.Buffer
 
-	for i, v := range items {
-		buffer.WriteString(strings.TrimSpace(strconv.Itoa(v)))
-		if i < len(items) - 1 {
-			buffer.WriteString(sep)
-		}
-	}
+    for i, v := range items {
+        buffer.WriteString(strings.TrimSpace(strconv.Itoa(v)))
+        if i < len(items) - 1 {
+            buffer.WriteString(sep)
+        }
+    }
 
-	return buffer.String()
+    return buffer.String()
 }
 
 // Int64ArrayToList takes an array of int64s and transforms them into a 
 // single string, delimited by a specified separator.
 func Int64ArrayToList(items []int64, sep string) string {
-	var buffer bytes.Buffer
+    var buffer bytes.Buffer
 
-	for i, v := range items {
-		buffer.WriteString(strings.TrimSpace(strconv.FormatInt(v, 10)))
-		if i < len(items) - 1 {
-			buffer.WriteString(sep)
-		}
-	}
+    for i, v := range items {
+        buffer.WriteString(strings.TrimSpace(strconv.FormatInt(v, 10)))
+        if i < len(items) - 1 {
+            buffer.WriteString(sep)
+        }
+    }
 
-	return buffer.String()
+    return buffer.String()
 }
 
 // StrArrayToCsv is a helper function that calls StrArrayToList 
 // using ", " as a separator.
 func StrArrayToCsv(items []string) string {
-	return StrArrayToList(items, ", ")
+    return StrArrayToList(items, ", ")
 }
 
 // StrArrayToLines is a helper function that calls StrArrayToList
 // using "\n" as a separator.
 func StrArrayToLines(items []string) string {
-	return StrArrayToList(items, "\n")
+    return StrArrayToList(items, "\n")
 }
 
 // StrArrayToList takes an array of strings and transforms them into a 
 // single string, delimited by a specified separator.
 func StrArrayToList(items []string, sep string) string {
-	var buffer bytes.Buffer
+    var buffer bytes.Buffer
 
-	for i, v := range items {
-		buffer.WriteString(strings.TrimSpace(v))
-		if i < len(items) - 1 {
-			buffer.WriteString(sep)
-		}
-	}
+    for i, v := range items {
+        buffer.WriteString(strings.TrimSpace(v))
+        if i < len(items) - 1 {
+            buffer.WriteString(sep)
+        }
+    }
 
-	return buffer.String()
+    return buffer.String()
 }
 
 // StrEq compares two strings, character for character, and returns 
 // true if they are the same.
 func StrEq(s1, s2 string) bool {
-	if len(s1) != len(s2) {
-		return false
-	}
+    if len(s1) != len(s2) {
+        return false
+    }
 
-	for i := range s1 {
-		if s1[i] != s2[i] {
-			return false
-		}
-	}
+    for i := range s1 {
+        if s1[i] != s2[i] {
+            return false
+        }
+    }
 
-	return true
+    return true
 }

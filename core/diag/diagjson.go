@@ -14,14 +14,14 @@ package diag
 
 // Stdlib imports.
 import(
-	"encoding/json"
+    "encoding/json"
 )
 
 // AsJson aggregates and returns diagnostics information in json format.
 // Diagnostic information includes hostname, CPU count, environment data,
 // stack traces for all running goroutines, and memory allocation statistics.
 func AsJson(diagData *DiagData) string {
-	json, _ := json.MarshalIndent(diagData, "", "    ")
-	
-	return string(json)
+    json, _ := json.MarshalIndent(diagData, "", "    ")
+    
+    return string(json)
 }

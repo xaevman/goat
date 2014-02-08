@@ -26,8 +26,8 @@ import _ "github.com/xaevman/goat/prod"
 // there was no error the Data field will contain the JSON encoded
 // debugging data from the server.
 type CmdMsg struct {
-	Access byte
-	Cmd    byte		// +export+
-	Data   string	// +export+
-	FromId uint32
+    Access byte
+    Cmd    byte     // +export+
+    Data   string   // +export+
+    FromId uint32
 }

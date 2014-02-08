@@ -14,12 +14,12 @@ package main
 
 // External imports.
 import (
-	"github.com/xaevman/goat/core/goapp"
+    "github.com/xaevman/goat/core/goapp"
 )
 
 // Stdlib imports.
 import (
-	"flag"
+    "flag"
 )
 
 // ConsoleCliStart is a goapp.AppStarter implementation which runs a
@@ -29,30 +29,30 @@ type ConsoleCliStart struct {}
 // PreInit parses command line arguments to set the target server
 // address and start-up username.
 func (this *ConsoleCliStart) PreInit() {
-	flag.StringVar(&srvAddr, "s", srvAddr, "remote server address")
-	flag.StringVar(&chatCli.username, "u", userName, "chat username")
-	flag.BoolVar(&useUdp, "udp", false, "enable UDP transport")
-	flag.Parse()
+    flag.StringVar(&srvAddr, "s", srvAddr, "remote server address")
+    flag.StringVar(&chatCli.username, "u", userName, "chat username")
+    flag.BoolVar(&useUdp, "udp", false, "enable UDP transport")
+    flag.Parse()
 }
 
 // PostInit connects to the remote server, closing the application if
 // a connection cannot be established.
 func (this *ConsoleCliStart) PostInit() {
-	var err error
+    var err error
 
-	if useUdp {
-		sock, err := proto.ListenUdp("127.0.0.1:8902")
-		if err != nil {
-			goapp.Stop()
-			return
-		}
+    if useUdp {
+        sock, err := proto.ListenUdp("127.0.0.1:8902")
+        if err != nil {
+            goapp.Stop()
+            return
+        }
 
-		err = proto.DialUdp(srvAddr, sock)
-	} else {
-		err = proto.DialTcp(srvAddr)
-	}
+        err = proto.DialUdp(srvAddr, sock)
+    } else {
+        err = proto.DialTcp(srvAddr)
+    }
 
-	if err != nil {
-		goapp.Stop()
-	}
+    if err != nil {
+        goapp.Stop()
+    }
 }

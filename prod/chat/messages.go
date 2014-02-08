@@ -22,10 +22,10 @@ import _ "github.com/xaevman/goat/prod"
 // ToID is the NetID of the message recipient. Text is the actual text of 
 // the message.
 type Msg struct {
-	Access    byte
-	ChannelId uint32	// +export+
-	From      string	// +export+
-	FromId    uint32
-	Subtype   byte		// +export+
-	Text      string	// +export+
+    Access    byte
+    ChannelId uint32    // +export+
+    From      string    // +export+
+    FromId    uint32
+    Subtype   byte      // +export+
+    Text      string    // +export+
 }

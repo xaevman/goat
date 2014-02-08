@@ -16,6 +16,6 @@ package prod
 
 // Product message signatures
 const (
-	CHAT_MSG = 0
-	DBG_MSG  = 10
+    CHAT_MSG = 0
+    DBG_MSG  = 10
 )

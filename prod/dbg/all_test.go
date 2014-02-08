@@ -20,61 +20,61 @@ import "github.com/xaevman/goat/prod"
 
 // Stdlib imports.
 import (
-	"log"
-	"testing"
+    "log"
+    "testing"
 )
 
 // TestMsgSig tests to make sure that the message handler returns
 // the expected message signature.
 func TestMsgSig(t *testing.T) {
-	handler := new(CmdMsgHandler)
-	if handler.Signature() != prod.DBG_MSG {
-		t.Fatalf(
-			"Signature mismatch (%d vs %d)", 
-			handler.Signature(), 
-			prod.DBG_MSG,
-		)
-	}
+    handler := new(CmdMsgHandler)
+    if handler.Signature() != prod.DBG_MSG {
+        t.Fatalf(
+            "Signature mismatch (%d vs %d)", 
+            handler.Signature(), 
+            prod.DBG_MSG,
+        )
+    }
 
-	log.Println("TestMsgSig: passed")
+    log.Println("TestMsgSig: passed")
 }
 
 // TestMsgSerialize tests serialization/deserialization of Msg objects.
 func TestMsgSerialize(t *testing.T) {
-	handler := new(CmdMsgHandler)
-	cmd     := new(CmdMsg)
-	cmd.Cmd  = CMD_ENV
-	cmd.Data = ""
+    handler := new(CmdMsgHandler)
+    cmd     := new(CmdMsg)
+    cmd.Cmd  = CMD_ENV
+    cmd.Data = ""
 
-	b, err := handler.SerializeMsg(cmd)
-	if err != nil {
-		t.Fatal(err)
-	}
+    b, err := handler.SerializeMsg(cmd)
+    if err != nil {
+        t.Fatal(err)
+    }
 
-	obj, err := handler.DeserializeMsg(b, 255)
-	if err != nil {
-		t.Fatal(err)
-	}
+    obj, err := handler.DeserializeMsg(b, 255)
+    if err != nil {
+        t.Fatal(err)
+    }
 
-	newCmd, ok := obj.(*CmdMsg)
-	if !ok {
-		t.Fatal("Invalid type received %T", obj)
-	}
+    newCmd, ok := obj.(*CmdMsg)
+    if !ok {
+        t.Fatal("Invalid type received %T", obj)
+    }
 
-	if cmd.Cmd != newCmd.Cmd {
-		t.Fatalf(
-			"Cmd mismatch: %s vs %s", 
-			cmd.Cmd, 
-			newCmd.Cmd,
-		)
-	}
+    if cmd.Cmd != newCmd.Cmd {
+        t.Fatalf(
+            "Cmd mismatch: %s vs %s", 
+            cmd.Cmd, 
+            newCmd.Cmd,
+        )
+    }
 
-	if cmd.Data != newCmd.Data {
-		t.Fatalf(
-			"Data mismatch: %s vs %s", 
-			cmd.Data, 
-			newCmd.Data,
-		)	}
+    if cmd.Data != newCmd.Data {
+        t.Fatalf(
+            "Data mismatch: %s vs %s", 
+            cmd.Data, 
+            newCmd.Data,
+        )   }
 
-	log.Printf("TestMsgSerialize: passed")
+    log.Printf("TestMsgSerialize: passed")
 }

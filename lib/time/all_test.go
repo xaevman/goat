@@ -16,63 +16,63 @@ package time
 
 // Stdlib imports.
 import (
-	"log"
-	"testing"
-	"time"
+    "log"
+    "testing"
+    "time"
 )
 
 // TestStopwatch instantiates a Stopwatch object and does a few timing tests,
 // making sure that the measured times are within a resaonable range of elapsed
 // time.
 func TestStopwatch(t *testing.T) {
-	s := new(Stopwatch)
+    s := new(Stopwatch)
 
-	s.Start()
+    s.Start()
 
-	<-time.After(15 * time.Millisecond)
-	x := s.MarkMs()
-	if x < 14 || x > 16 {
-		t.Fatalf("Measured ms after 15ms is out of range (%d)", x)
-	}
+    <-time.After(15 * time.Millisecond)
+    x := s.MarkMs()
+    if x < 14 || x > 16 {
+        t.Fatalf("Measured ms after 15ms is out of range (%d)", x)
+    }
 
-	log.Println("15ms: passed")
+    log.Println("15ms: passed")
 
-	<-time.After(445 * time.Millisecond)
-	x = s.MarkMs()
-	if x < 459 || x > 462 {
-		t.Fatalf("Measured ms after 460ms is incorrect (%d)", x)
-	}
+    <-time.After(445 * time.Millisecond)
+    x = s.MarkMs()
+    if x < 459 || x > 462 {
+        t.Fatalf("Measured ms after 460ms is incorrect (%d)", x)
+    }
 
-	log.Println("460ms: passed")
+    log.Println("460ms: passed")
 
-	s.Restart()
-	<-time.After(1 * time.Second)
-	x = s.MarkSec()
-	if x != 1 {
-		t.Fatalf("Measured sec after 1sec is incorrect(%d)", x)
-	}
+    s.Restart()
+    <-time.After(1 * time.Second)
+    x = s.MarkSec()
+    if x != 1 {
+        t.Fatalf("Measured sec after 1sec is incorrect(%d)", x)
+    }
 
-	log.Println("1sec: passed")
+    log.Println("1sec: passed")
 
-	<-time.After(4 * time.Second)
-	x = s.MarkSec()
-	if x != 5 {
-		t.Fatalf("Measured sec after 5sec is incorrect(%d)", x)
-	}
+    <-time.After(4 * time.Second)
+    x = s.MarkSec()
+    if x != 5 {
+        t.Fatalf("Measured sec after 5sec is incorrect(%d)", x)
+    }
 
-	log.Println("5sec: passed")
+    log.Println("5sec: passed")
 
-	<-time.After(2 * time.Second)
-	s.Stop()
+    <-time.After(2 * time.Second)
+    s.Stop()
 
-	<-time.After(3 * time.Second)
-	x = s.MarkSec()
-	if x != 7 {
-		t.Fatalf("Measured sec after 7sec is incorrect(%d)", x)
-	}
+    <-time.After(3 * time.Second)
+    x = s.MarkSec()
+    if x != 7 {
+        t.Fatalf("Measured sec after 7sec is incorrect(%d)", x)
+    }
 
-	// just make sure this doesn't crash
-	s.Mark()
+    // just make sure this doesn't crash
+    s.Mark()
 
-	log.Println("7sec: passed")
+    log.Println("7sec: passed")
 }

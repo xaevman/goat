@@ -14,13 +14,13 @@ package goapp
 
 // External imports.
 import (
-	"github.com/xaevman/goat/core/diag"
-	"github.com/xaevman/goat/core/log"
+    "github.com/xaevman/goat/core/diag"
+    "github.com/xaevman/goat/core/log"
 )
 
 // Stdlib imports.
 import (
-	"fmt"
+    "fmt"
 )
 
 // DefaultAppStarter is the default AppStarter implementation for a GoApp
@@ -29,12 +29,12 @@ type DefaultAppStarter struct {}
 
 // PreInit logs a debug message to the log service.
 func (this *DefaultAppStarter) PreInit() {
-	log.Debug("PreInit")
+    log.Debug("PreInit")
 }
 
 // PostInit logs a debug message to the log service.
 func (this *DefaultAppStarter) PostInit() {
-	log.Debug("PostInit")
+    log.Debug("PostInit")
 }
 
 
@@ -44,12 +44,12 @@ type DefaultAppCloser struct {}
 
 // PreShutdown logs a debug message to the log service.
 func (this *DefaultAppCloser) PreShutdown() {
-	log.Debug("PreShutdown")
+    log.Debug("PreShutdown")
 }
 
 // PostShutdown logs a debug message to the log service.
 func (this *DefaultAppCloser) PostShutdown() {
-	log.Debug("PostShutdown")
+    log.Debug("PostShutdown")
 }
 
 
@@ -60,12 +60,12 @@ type DefaultCrashHandler struct {}
 // OnCrash logs a crash message to the log service and then calls panic with
 // the same panic data.
 func (this *DefaultCrashHandler) OnCrash(crashData interface{}) {
-	diagData             := diag.New()
-	diagData.System.Error = fmt.Sprintf("%v", crashData)
+    diagData             := diag.New()
+    diagData.System.Error = fmt.Sprintf("%v", crashData)
 
-	log.Crash(diag.AsString(diagData))
+    log.Crash(diag.AsString(diagData))
 
-	panic(crashData)
+    panic(crashData)
 }
 
 
@@ -75,15 +75,15 @@ type DefaultLoopHandler struct {}
 
 // OnHeartbeat logs a debug message to the log service.
 func (this *DefaultLoopHandler) OnHeartbeat() {
-	log.Debug("OnHeartbeat")
+    log.Debug("OnHeartbeat")
 }
 
 // PreLoop logs a debug message to the log service.
 func (this *DefaultLoopHandler) PreLoop() {
-	log.Debug("PreLoop")
+    log.Debug("PreLoop")
 }
 
 // PostLoop logs a debug message to the log service.
 func (this *DefaultLoopHandler) PostLoop() {
-	log.Debug("PostLoop")
+    log.Debug("PostLoop")
 }

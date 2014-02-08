@@ -20,15 +20,15 @@ const CHAT_MSG_SEND_TIMEOUT_SEC = 5
 
 // Msg subtypes
 const (
-	MSG_SUB_CHAT = iota
-	MSG_SUB_CMD
-	MSG_SUB_CONNECT
-	MSG_SUB_JOIN_CHANNEL
-	MSG_SUB_LEAVE_CHANNEL
-	MSG_SUB_SET_NAME
+    MSG_SUB_CHAT = iota
+    MSG_SUB_CMD
+    MSG_SUB_CONNECT
+    MSG_SUB_JOIN_CHANNEL
+    MSG_SUB_LEAVE_CHANNEL
+    MSG_SUB_SET_NAME
 )
 
 // Channel constants.
 const (
-	PUB_CHANNEL = "public"
+    PUB_CHANNEL = "public"
 )

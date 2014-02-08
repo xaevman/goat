@@ -18,7 +18,7 @@ type NoSecurity struct {}
 
 // Authorize always returns 255, nil.
 func (this *NoSecurity) Authorize(con Connection) (byte, error) {
-	return 255, nil
+    return 255, nil
 }
 
 // Unused.

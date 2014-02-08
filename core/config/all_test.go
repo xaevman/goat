@@ -18,40 +18,40 @@ package config
 
 // Stdlib imports.
 import(
-	"log"
-	"testing"
+    "log"
+    "testing"
 )
 
 // TestConfig initializes a couple of ini providers and
 // attempts to pull values back out of them.
 func TestConfig(t *testing.T) {
-	IniDir = "./"
+    IniDir = "./"
 
-	InitEnvProvider(1)
-	if InitIniProvider("test.ini", 2) == nil {
-		t.Fatal("Ini file not found")
-	}
+    InitEnvProvider(1)
+    if InitIniProvider("test.ini", 2) == nil {
+        t.Fatal("Ini file not found")
+    }
 
-	key         := "PATH"
-	data, entry := GetAllVals(key, "/bin:/sbin")
-	printConfig(key, data, entry.Parser())
+    key         := "PATH"
+    data, entry := GetAllVals(key, "/bin:/sbin")
+    printConfig(key, data, entry.Parser())
 
-	key         = "Ini.Section.key1"
-	data, entry = GetAllVals(key, "default1")
-	printConfig(key, data, entry.Parser())
+    key         = "Ini.Section.key1"
+    data, entry = GetAllVals(key, "default1")
+    printConfig(key, data, entry.Parser())
 
-	key         = "This.Key.Shouldnt.exist"
-	data, entry = GetAllVals(key, "default3")
-	printConfig(key, data, entry.Parser())
+    key         = "This.Key.Shouldnt.exist"
+    data, entry = GetAllVals(key, "default3")
+    printConfig(key, data, entry.Parser())
 }
 
 //printConfig prints the value data retreived from the config system.
 func printConfig(key string, vals []string, parser ConfigProvider) {
-	if vals == nil {
-		return
-	}
+    if vals == nil {
+        return
+    }
 
-	for i, v := range vals {
-		log.Printf("%v.%v[%v]: %v", parser.Name(), key, i, v)
-	}
+    for i, v := range vals {
+        log.Printf("%v.%v[%v]: %v", parser.Name(), key, i, v)
+    }
 }

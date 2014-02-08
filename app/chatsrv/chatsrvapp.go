@@ -14,16 +14,16 @@ package main
 
 // External imports.
 import(
-	"github.com/xaevman/goat/core/config"
-	"github.com/xaevman/goat/core/diag"
-	"github.com/xaevman/goat/core/log"
-	"github.com/xaevman/goat/core/net"
-	"github.com/xaevman/goat/lib/perf"
+    "github.com/xaevman/goat/core/config"
+    "github.com/xaevman/goat/core/diag"
+    "github.com/xaevman/goat/core/log"
+    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/lib/perf"
 )
 
 // Stdlib imports.
 import(
-	"fmt"
+    "fmt"
 )
 
 
@@ -35,28 +35,28 @@ type ChatSrvStart struct {}
 // system to determine if debug logs should be enabled during this
 // run.
 func (this *ChatSrvStart) PreInit() {
-	config.InitIniProvider("config/chat.ini", 1)
-	debugLogs, _ := config.GetBoolVal("System.DebugLogs", 0, false)
-	log.DebugLogs = debugLogs
+    config.InitIniProvider("config/chat.ini", 1)
+    debugLogs, _ := config.GetBoolVal("System.DebugLogs", 0, false)
+    log.DebugLogs = debugLogs
 }
 
 // PostInit queries the config system to determine which bind address
 // the server should listen on.
 func (this *ChatSrvStart) PostInit() {
-	addr, _ := config.GetVal("Net.SrvAddrTcp", 0, DEFAULT_TCP_ADDR)
-	proto.ListenTcp(addr)
+    addr, _ := config.GetVal("Net.SrvAddrTcp", 0, DEFAULT_TCP_ADDR)
+    proto.ListenTcp(addr)
 
-	addr, _ = config.GetVal("Net.SrvAddrUdp", 0, DEFAULT_UDP_ADDR)
-	proto.ListenUdp(addr)
+    addr, _ = config.GetVal("Net.SrvAddrUdp", 0, DEFAULT_UDP_ADDR)
+    proto.ListenUdp(addr)
 
-	addr, _ = config.GetVal("Debug.SrvAddr", 0, DEFAULT_DBG_ADDR)
-	dbgProto.ListenTcp(addr)
+    addr, _ = config.GetVal("Debug.SrvAddr", 0, DEFAULT_DBG_ADDR)
+    dbgProto.ListenTcp(addr)
 
-	addr, _ = config.GetVal("Net.SrvAddrHttp", 0, DEFAULT_DIAG_URI)
-	if addr != "" {
-		net.InitHttpSrv(addr)
-		diag.InitWebDiag()
-	}
+    addr, _ = config.GetVal("Net.SrvAddrHttp", 0, DEFAULT_DIAG_URI)
+    if addr != "" {
+        net.InitHttpSrv(addr)
+        diag.InitWebDiag()
+    }
 }
 
 
@@ -67,17 +67,17 @@ type ChatSrvLoop struct {}
 // OnHeartbeat queries the perf system for basic rx/tx stats and
 // prints their rates to the console.
 func (this *ChatSrvLoop) OnHeartbeat() {
-	chatCounters := perf.GetCounterSet("Module.Net.Proto.ChatSrv")
-	rx           := chatCounters.Get(net.PERF_PROTO_RCV_OK)
-	tx           := chatCounters.Get(net.PERF_PROTO_SEND_OK)
+    chatCounters := perf.GetCounterSet("Module.Net.Proto.ChatSrv")
+    rx           := chatCounters.Get(net.PERF_PROTO_RCV_OK)
+    tx           := chatCounters.Get(net.PERF_PROTO_SEND_OK)
 
-	perfStr := fmt.Sprintf(
-		"rx/tx sec: %d/%d",
-		rx.PerSec(),
-		tx.PerSec(),
-	)
+    perfStr := fmt.Sprintf(
+        "rx/tx sec: %d/%d",
+        rx.PerSec(),
+        tx.PerSec(),
+    )
 
-	log.Info(perfStr)
+    log.Info(perfStr)
 }
 
 // PreLoop is unused in ChatSrvLoop.
