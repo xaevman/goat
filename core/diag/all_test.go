@@ -19,6 +19,7 @@ import (
 
 // Stdlib imports.
 import (
+    "encoding/json"
     "fmt"
     "log"
     "testing"
@@ -36,10 +37,37 @@ var perfNames = []string {
     "Test2",
 }
 
+// TestStacks prints the object-based stack produced by NewStackTrace, and
+// compares it to the string-formatted output produced by NewStackString.
+func TestStacks(t *testing.T) {
+    go func() {
+        for {
+            <-time.After(1 * time.Second)
+        }
+    }()
+
+    go func() {
+        for {
+            <-time.After(1 * time.Second)
+        }
+    }()
+
+    results := NewStackTrace()
+    if results == nil {
+        t.Fatalf("Stack trace nil")
+    }
+
+    json, _ := json.MarshalIndent(results, "", "    ")    
+    fmt.Println(string(json))
+
+    fmt.Println()
+
+    fmt.Println(NewStackString())
+}
 
 // TestDiag creates diag objects and formats them as strings and json.
 // If the process doesn't crash itself, the test passes!
-func TestDiag(t *testing.T) {
+func _TestDiag(t *testing.T) {
     perfs := perf.NewCounterSet("Module.Diag", PERF_DIAG_COUNT, perfNames)
     perfs.Increment(PERF_DIAG_TEST1)
 
@@ -61,8 +89,9 @@ func TestDiag(t *testing.T) {
     log.Println(json)
 }
 
-
-func TestBlocked(t *testing.T) {
+// TestBlocked creates diagnostic information for blocked goroutines
+// and prints it to the console for validation.
+func _TestBlocked(t *testing.T) {
     fmt.Println()
     log.Println("Testing blocked output ==============")
     go func() {

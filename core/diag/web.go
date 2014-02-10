@@ -19,6 +19,7 @@ import (
 
 // Stdlib imports.
 import (
+    "encoding/json"
     "fmt"
     "net/http"
     _ "net/http/pprof"
@@ -101,8 +102,8 @@ func uriRoot(w http.ResponseWriter, req *http.Request) {
 
 // uriStack is the handler for the /diag/stack uri.
 func uriStack(w http.ResponseWriter, req *http.Request) {
-    data := NewFullStackTrace()
-    fmt.Fprint(w, data)
+    data, _ := json.MarshalIndent(NewStackTrace(), "", "    ")
+    fmt.Fprint(w, string(data))
 }
 
 // uriSys is the handler for the /diag/sys uri.

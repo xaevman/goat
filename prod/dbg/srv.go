@@ -160,7 +160,7 @@ func (this *DbgSrv) onPerfCmd(cmdMsg *CmdMsg) {
 // onStackCmd dumps a full stack trace of all goroutines and transmits it
 // back to the requestor.
 func (this *DbgSrv) onStackCmd(cmdMsg *CmdMsg) {
-    stack      := diag.NewFullStackTrace()
+    stack      := diag.NewStackString()
     cmdMsg.Cmd  = CMD_RESPONSE
     cmdMsg.Data = stack
 

@@ -38,9 +38,6 @@ func AsString(diagData *DiagData) string {
         "==== [Begin Stack Trace] ====\n"      +
         "%s"                                   +
         "==== [End Stack Trace] ====\n\n"      +
-        "==== [Begin Full Stack Trace] ====\n" +
-        "%s"                                   +
-        "==== [End Full Stack Trace] ====\n\n" +
         "==== [Begin MemStats] ====\n"         +
         "%s"                                   +
         "==== [End MemStats] ====\n\n"         +
@@ -51,8 +48,7 @@ func AsString(diagData *DiagData) string {
         data.System,
         data.Environment,
         data.Perfs,
-        data.CallStack,
-        data.FullStackTrace,
+        data.StackTrace,
         FmtMemStatsStr(data.Memory),
         FmtMallocStatsStr(data.Memory),
     )

@@ -46,8 +46,7 @@ type DiagData struct {
     System         *SysData
     Environment    *EnvData
     Perfs          *perf.Snapshot
-    CallStack      string
-    FullStackTrace string
+    StackTrace     []*StackTrace
     Memory         *runtime.MemStats
 }
 
@@ -122,10 +121,7 @@ func New() *DiagData {
     data := new(DiagData)
 
     // active stacks
-    data.FullStackTrace = NewFullStackTrace()
-
-    // call stack
-    data.CallStack = NewStackTrace()
+    data.StackTrace = NewStackTrace()
 
     // environtment
     data.Environment = NewEnvData()
@@ -149,7 +145,7 @@ func NewBlockedData() string {
     var results bytes.Buffer
     var temp    bytes.Buffer
 
-    readBuffer := bytes.NewBufferString(NewFullStackTrace())
+    readBuffer := bytes.NewBufferString(NewStackString())
     line, err  := readBuffer.ReadString('\n');
 
     for err == nil {
@@ -199,8 +195,8 @@ func NewEnvData() *EnvData {
     return &envData
 }
 
-// NewFullStackTrace dumps stack traces for all active go routines.
-func NewFullStackTrace() string {
+// NewStackString dumps stack traces for all active go routines.
+func NewStackString() string {
     buffer := make([]byte, TRACE_BUFFER_LEN_B)
     count  := runtime.Stack(buffer, true)
     return string(buffer[:count])
@@ -214,12 +210,12 @@ func NewMemData() *runtime.MemStats {
     return stats
 }
 
-// NewStackTrace dumps the current calling stack in string format.
-func NewStackTrace() string {
-    buffer := make([]byte, TRACE_BUFFER_LEN_B)
-    count  := runtime.Stack(buffer, false)  
-    return string(buffer[:count])
-}
+// // NewStackTrace dumps the current calling stack in string format.
+// func NewStackTrace() string {
+//     buffer := make([]byte, TRACE_BUFFER_LEN_B)
+//     count  := runtime.Stack(buffer, false)  
+//     return string(buffer[:count])
+// }
 
 // NewSysData creatse and populates a new SysData object and returns a
 // pointer to it for use.
