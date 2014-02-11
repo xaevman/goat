@@ -14,10 +14,10 @@ package main
 
 // External imports.
 import(
-    "github.com/xaevman/goat/core/log"
-    "github.com/xaevman/goat/core/net"
-    "github.com/xaevman/goat/prod"
-    "github.com/xaevman/goat/prod/chat"
+    "github.com/xaevman/goat/mod/log"
+    "github.com/xaevman/goat/mod/net"
+    "github.com/xaevman/goat/proto"
+    "github.com/xaevman/goat/proto/chat"
 )
 
 // Stdlib imports.
@@ -262,7 +262,7 @@ func (this *ChatSrv) handleSetName(msg *chat.Msg) {
 
 // send transmits a new message through the message processor.
 func (this *ChatSrv) send(toId uint32, msg *chat.Msg) {
-    this.proto.SendMsg(toId, prod.CHAT_MSG, msg)
+    this.proto.SendMsg(toId, proto.CHAT_MSG, msg)
 }
 
 // sendJoinChanConfirm sends a message to the client to let it know that it has

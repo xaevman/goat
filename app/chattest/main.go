@@ -14,8 +14,8 @@ package main
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/goapp"
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/goapp"
+    "github.com/xaevman/goat/mod/net"
 )
 
 // Application name.

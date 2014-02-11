@@ -14,10 +14,10 @@ package main
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/goapp"
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/goapp"
+    "github.com/xaevman/goat/mod/net"
     "github.com/xaevman/goat/lib/perf"
-    "github.com/xaevman/goat/prod/dbg"
+    "github.com/xaevman/goat/proto/dbg"
 )
 
 // Application name.
@@ -61,8 +61,8 @@ var perfs = perf.NewCounterSet(
 
 // Protocol instances.
 var(
-    dbgProto = net.NewProtocol(APP_NAME + "Dbg", new(dbg.DbgSrv))
-    proto    = net.NewProtocol(APP_NAME, new(ChatSrv))
+    dbgProto  = net.NewProtocol(APP_NAME + "Dbg", new(dbg.DbgSrv))
+    chatproto = net.NewProtocol(APP_NAME, new(ChatSrv))
 )
 
 

@@ -14,8 +14,8 @@ package goapp
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/diag"
-    "github.com/xaevman/goat/core/log"
+    "github.com/xaevman/goat/mod/diag"
+    "github.com/xaevman/goat/mod/log"
 )
 
 // Stdlib imports.

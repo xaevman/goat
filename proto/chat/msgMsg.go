@@ -12,7 +12,7 @@ package chat
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/net"
     "github.com/xaevman/goat/lib/buffer"
 )
 
@@ -24,7 +24,7 @@ import (
 
 // Generated imports.
 import (
-    "github.com/xaevman/goat/prod"
+    "github.com/xaevman/goat/proto"
 )
 
 // MsgHandler is an empty function container.
@@ -90,7 +90,7 @@ func (this *MsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
     return msg, nil
 }
 
-// Signature returns Msg's network signature (prod.CHAT_MSG).
+// Signature returns Msg's network signature (proto.CHAT_MSG).
 func (this *MsgHandler) Signature() uint16 {
-    return prod.CHAT_MSG
+    return proto.CHAT_MSG
 }

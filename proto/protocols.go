@@ -1,6 +1,6 @@
 //  ---------------------------------------------------------------------------
 //
-//  prod.go
+//  proto.go
 //
 //  Copyright (c) 2014, Jared Chavez. 
 //  All rights reserved.
@@ -10,11 +10,11 @@
 //
 //  -----------
 
-// Package prod provides common definitions for goat's built-in
+// Package proto provides common definitions for goat's built-in
 // network protocols and message signatures.
-package prod
+package proto
 
-// Product message signatures
+// protocol message signatures
 const (
     CHAT_MSG = 0
     DBG_MSG  = 10

@@ -14,7 +14,7 @@ package net
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/log"
+    "github.com/xaevman/goat/mod/log"
     "github.com/xaevman/goat/lib/lifecycle"
     "github.com/xaevman/goat/lib/math"
     "github.com/xaevman/goat/lib/perf"

@@ -16,7 +16,7 @@
 package chat
 
 // Products import.
-import "github.com/xaevman/goat/prod"
+import "github.com/xaevman/goat/proto"
 
 // Stdlib imports.
 import (
@@ -28,11 +28,11 @@ import (
 // the expected message signature.
 func TestMsgSig(t *testing.T) {
     handler := new(MsgHandler)
-    if handler.Signature() != prod.CHAT_MSG {
+    if handler.Signature() != proto.CHAT_MSG {
         t.Fatalf(
             "Signature mismatch (%d vs %d)", 
             handler.Signature(), 
-            prod.CHAT_MSG,
+            proto.CHAT_MSG,
         )
     }
 

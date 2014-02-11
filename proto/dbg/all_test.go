@@ -16,7 +16,7 @@
 package dbg
 
 // Products import.
-import "github.com/xaevman/goat/prod"
+import "github.com/xaevman/goat/proto"
 
 // Stdlib imports.
 import (
@@ -28,11 +28,11 @@ import (
 // the expected message signature.
 func TestMsgSig(t *testing.T) {
     handler := new(CmdMsgHandler)
-    if handler.Signature() != prod.DBG_MSG {
+    if handler.Signature() != proto.DBG_MSG {
         t.Fatalf(
             "Signature mismatch (%d vs %d)", 
             handler.Signature(), 
-            prod.DBG_MSG,
+            proto.DBG_MSG,
         )
     }
 

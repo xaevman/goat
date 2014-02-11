@@ -356,7 +356,7 @@ package {{.Package}}
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/net"
     "github.com/xaevman/goat/lib/buffer"
 )
 

@@ -14,12 +14,12 @@ package main
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/goapp"
-    "github.com/xaevman/goat/core/log"
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/goapp"
+    "github.com/xaevman/goat/mod/log"
+    "github.com/xaevman/goat/mod/net"
     "github.com/xaevman/goat/lib/str"
-    "github.com/xaevman/goat/prod"
-    "github.com/xaevman/goat/prod/chat"
+    "github.com/xaevman/goat/proto"
+    "github.com/xaevman/goat/proto/chat"
 )
 
 // Stdlib imports.
@@ -294,7 +294,7 @@ func (this *ChatTest) runTests() {
 
 // send transmits a Msg object to the server.
 func (this *ChatTest) send(msg *chat.Msg) {
-    this.proto.SendMsg(this.srvId, prod.CHAT_MSG, msg)
+    this.proto.SendMsg(this.srvId, proto.CHAT_MSG, msg)
 }
 
 // sendChat sends a chat message to the server.

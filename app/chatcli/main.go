@@ -14,8 +14,8 @@ package main
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/goapp"
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/goapp"
+    "github.com/xaevman/goat/mod/net"
 )
 
 // Application name.
@@ -30,8 +30,8 @@ var (
 
 // ChatCli protocol instance and event handler.
 var (
-    chatCli = new(ChatCli)
-    proto   = net.NewProtocol(APP_NAME, chatCli)
+    chatCli   = new(ChatCli)
+    chatproto = net.NewProtocol(APP_NAME, chatCli)
 )
 
 // main is the application entry point.

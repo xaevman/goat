@@ -14,11 +14,11 @@ package dbg
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/diag"
-    "github.com/xaevman/goat/core/log"
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/diag"
+    "github.com/xaevman/goat/mod/log"
+    "github.com/xaevman/goat/mod/net"
     "github.com/xaevman/goat/lib/perf"
-    "github.com/xaevman/goat/prod"
+    "github.com/xaevman/goat/proto"
 )
 
 // Stdlib imports
@@ -179,5 +179,5 @@ func (this *DbgSrv) onSysCmd(cmdMsg *CmdMsg) {
 
 // send passes the give CmdMsg along to the protocol layer.
 func (this *DbgSrv) send(cmdMsg *CmdMsg) {
-    this.proto.SendMsg(cmdMsg.FromId, prod.DBG_MSG, cmdMsg)
+    this.proto.SendMsg(cmdMsg.FromId, proto.DBG_MSG, cmdMsg)
 }

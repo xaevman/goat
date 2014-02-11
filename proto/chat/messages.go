@@ -12,9 +12,9 @@
 
 package chat
 
-import _ "github.com/xaevman/goat/prod"
+import _ "github.com/xaevman/goat/proto"
 
-/* +NetMsg+ prod.CHAT_MSG */
+/* +NetMsg+ proto.CHAT_MSG */
 // Msg represents a message sent from one client to the chat system.
 // ChannelId is the channel that the message is being sent to. From is the 
 // friendly name of the user sending the message. FromId is the NetID of

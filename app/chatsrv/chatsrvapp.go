@@ -14,10 +14,10 @@ package main
 
 // External imports.
 import(
-    "github.com/xaevman/goat/core/config"
-    "github.com/xaevman/goat/core/diag"
-    "github.com/xaevman/goat/core/log"
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/config"
+    "github.com/xaevman/goat/mod/diag"
+    "github.com/xaevman/goat/mod/log"
+    "github.com/xaevman/goat/mod/net"
     "github.com/xaevman/goat/lib/perf"
 )
 
@@ -44,10 +44,10 @@ func (this *ChatSrvStart) PreInit() {
 // the server should listen on.
 func (this *ChatSrvStart) PostInit() {
     addr, _ := config.GetVal("Net.SrvAddrTcp", 0, DEFAULT_TCP_ADDR)
-    proto.ListenTcp(addr)
+    chatproto.ListenTcp(addr)
 
     addr, _ = config.GetVal("Net.SrvAddrUdp", 0, DEFAULT_UDP_ADDR)
-    proto.ListenUdp(addr)
+    chatproto.ListenUdp(addr)
 
     addr, _ = config.GetVal("Debug.SrvAddr", 0, DEFAULT_DBG_ADDR)
     dbgProto.ListenTcp(addr)

@@ -12,9 +12,9 @@
 
 package dbg
 
-import _ "github.com/xaevman/goat/prod"
+import _ "github.com/xaevman/goat/proto"
 
-/* +NetMsg+ prod.DBG_MSG */
+/* +NetMsg+ proto.DBG_MSG */
 // CmdMsg represents a command message being sent into the debugging
 // system. Access is the authorized level of access passed up from the
 // protocol layer. Cmd is the base command being issued to the server.

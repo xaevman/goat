@@ -14,13 +14,13 @@ package main
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/goapp"
-    "github.com/xaevman/goat/core/log"
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/goapp"
+    "github.com/xaevman/goat/mod/log"
+    "github.com/xaevman/goat/mod/net"
     "github.com/xaevman/goat/lib/console"
     "github.com/xaevman/goat/lib/lifecycle"
-    "github.com/xaevman/goat/prod"
-    "github.com/xaevman/goat/prod/dbg"
+    "github.com/xaevman/goat/proto"
+    "github.com/xaevman/goat/proto/dbg"
 )
 
 // Stdlib imports
@@ -57,7 +57,7 @@ var (
 )
 
 // CmdInfo stores command, help text, and raw enum values for a given
-// prod.DBG_MSG subtype.
+// proto.DBG_MSG subtype.
 type CmdInfo struct {
     cmdTxt  string
     helpTxt string
@@ -278,7 +278,7 @@ func (this *DbgCli) sendCmd(cmd string) {
         txtStyle,
     )
 
-    this.proto.SendMsg(this.srvId, prod.DBG_MSG, cmdMsg)
+    this.proto.SendMsg(this.srvId, proto.DBG_MSG, cmdMsg)
 }
 
 // startInput starts the console input loop, reading text from

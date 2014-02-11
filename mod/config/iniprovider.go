@@ -17,7 +17,7 @@ import (
     "github.com/xaevman/goat/lib/fs"
     "github.com/xaevman/goat/lib/perf"
     "github.com/xaevman/goat/lib/str"
-    "github.com/xaevman/goat/core/log"
+    "github.com/xaevman/goat/mod/log"
 )
 
 // Stdlib imports.

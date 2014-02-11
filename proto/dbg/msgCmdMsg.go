@@ -12,7 +12,7 @@ package dbg
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/net"
+    "github.com/xaevman/goat/mod/net"
     "github.com/xaevman/goat/lib/buffer"
 )
 
@@ -24,7 +24,7 @@ import (
 
 // Generated imports.
 import (
-    "github.com/xaevman/goat/prod"
+    "github.com/xaevman/goat/proto"
 )
 
 // CmdMsgHandler is an empty function container.
@@ -80,7 +80,7 @@ func (this *CmdMsgHandler) SerializeMsg(data interface{}) (*net.Msg, error) {
     return msg, nil
 }
 
-// Signature returns CmdMsg's network signature (prod.DBG_MSG).
+// Signature returns CmdMsg's network signature (proto.DBG_MSG).
 func (this *CmdMsgHandler) Signature() uint16 {
-    return prod.DBG_MSG
+    return proto.DBG_MSG
 }

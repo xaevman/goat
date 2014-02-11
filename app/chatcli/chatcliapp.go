@@ -14,7 +14,7 @@ package main
 
 // External imports.
 import (
-    "github.com/xaevman/goat/core/goapp"
+    "github.com/xaevman/goat/mod/goapp"
 )
 
 // Stdlib imports.
@@ -41,15 +41,15 @@ func (this *ConsoleCliStart) PostInit() {
     var err error
 
     if useUdp {
-        sock, err := proto.ListenUdp("127.0.0.1:8902")
+        sock, err := chatproto.ListenUdp("127.0.0.1:8902")
         if err != nil {
             goapp.Stop()
             return
         }
 
-        err = proto.DialUdp(srvAddr, sock)
+        err = chatproto.DialUdp(srvAddr, sock)
     } else {
-        err = proto.DialTcp(srvAddr)
+        err = chatproto.DialTcp(srvAddr)
     }
 
     if err != nil {
