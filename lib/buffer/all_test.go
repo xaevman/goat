@@ -10,14 +10,7 @@
 //
 //  -----------
 
-// Package buffer contains helper functions for writing and reading basic
-// types into and out of byte slices.
 package buffer
-
-// External imports.
-import (
-    "github.com/xaevman/goat/lib/str"
-)
 
 // Stdlib imports.
 import (
@@ -140,7 +133,7 @@ func TestRoundTrips(t *testing.T) {
         if err != nil {
             t.Fatal(err)
         }
-        if !str.StrEq(val, k) {
+        if !strEq(val, k) {
             t.Fatalf("Values don't match: %v != %v", val, k)
         }
     }
@@ -176,4 +169,20 @@ func TestRoundTrips(t *testing.T) {
     }
 
     log.Println("TestRoundTrips: passed")
+}
+
+// strEq compares two strings, character for character, and returns 
+// true if they are the same.
+func strEq(s1, s2 string) bool {
+    if len(s1) != len(s2) {
+        return false
+    }
+
+    for i := range s1 {
+        if s1[i] != s2[i] {
+            return false
+        }
+    }
+
+    return true
 }

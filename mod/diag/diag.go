@@ -11,7 +11,7 @@
 //  -----------
 
 // Package diag implements functions for dumping crash information
-// into various formats
+// into various formats.
 package diag
 
 import (

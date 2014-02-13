@@ -10,7 +10,12 @@
 //
 //  -----------
 
-// Package goapp
+// Package goapp wraps many goat modules into an application abstraction, making
+// it easy to implement fully featured applications which include common features
+// like logging, external configuration, network communication, performance
+// monitoring and crash handling. All features are already integrated into the
+// goapp abstraction, and customized behavior can be achieved by implementing
+// and registering simple interface objects with goapp.
 package goapp
 
 // External imports.

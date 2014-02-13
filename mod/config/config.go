@@ -10,6 +10,10 @@
 //
 //  -----------
 
+// Package config presents a unified, hierarchical interface for retreiving
+// configuration options from any registered providers. The package includes
+// builtin providers for retrieving config settings from the environment and
+// ini formatted config files.
 package config
 
 // External imports.

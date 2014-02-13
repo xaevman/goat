@@ -10,6 +10,8 @@
 //
 //  -----------
 
+// Package console provides some VT100-like helper functions for providing
+// a more full-featured console presentation.
 package console
 
 // Stdlib imports.

@@ -10,6 +10,8 @@
 //
 //  -----------
 
+// Package lifecycle implements a simple helper object to make
+// synchronization of worker goroutines a little less verbose.
 package lifecycle
 
 // Stdlib imports.

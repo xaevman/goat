@@ -10,9 +10,6 @@
 //
 //  -----------
 
-
-// Package chat defines the various message handlers and network objects used
-// in the test chat server and client applications.
 package chat
 
 // Products import.

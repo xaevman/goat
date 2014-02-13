@@ -10,23 +10,6 @@
 //
 //  -----------
 
-// Package net provides abstractions for TCP servers and clients
-// which handle massively parallel IO and present a unified interface
-// for implementing security and messaging protocols on top of them.
-//
-// Network message (max length 32KB)
-//      flags
-//          11: compressed
-//          12: encrypted
-//          13: reserved
-//          14: reserved
-//          15: reserved
-//          16: reserved
-//
-// [0-1]     msgtype (bits 1-10 for 1024 unique msg types), flags (bits 11-16)
-// [2-3]     msgsize (uint16)
-// [4-7]     crc32 checksum of payload (uint32)
-// [8-32767] payload is msg size
 package net
 
 // External imports.

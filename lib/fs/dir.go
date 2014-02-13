@@ -10,6 +10,8 @@
 //
 //  -----------
 
+// Package fs provides helper functions to assist with common operations
+// on files and directories.
 package fs
 
 // Stdlib imports.

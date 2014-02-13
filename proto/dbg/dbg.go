@@ -10,6 +10,9 @@
 //
 //  -----------
 
+// Package dbg implements a protocol which can be included in a goat 
+// project to enable realtime performance and diagnostic monitoring over 
+// a TCP connection.
 package dbg
 
 // External imports.

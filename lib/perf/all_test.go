@@ -10,8 +10,6 @@
 //
 //  -----------
 
-// Package perf exposes a centralized API for storing, tracking, and querying
-// performance data for a Go application.
 package perf
 
 // Stdlib imports.
