@@ -1,4 +1,3 @@
-
 # ![goat](https://s3-us-west-2.amazonaws.com/xaevman-git/goat_icon.png) Go Application Template (goat)
 
 ## Overview
