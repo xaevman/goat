@@ -18,10 +18,6 @@ import (
     "github.com/xaevman/goat/mod/log"
 )
 
-// Stdlib imports.
-import (
-    "fmt"
-)
 
 // DefaultAppStarter is the default AppStarter implementation for a GoApp
 // unless overwridden via SetAppStarter().
@@ -60,9 +56,9 @@ type DefaultCrashHandler struct {}
 // OnCrash logs a crash message to the log service and then calls panic with
 // the same panic data.
 func (this *DefaultCrashHandler) OnCrash(crashData interface{}) {
-    diagData             := diag.New()
-    diagData.System.Error = fmt.Sprintf("%v", crashData)
+    diagData := diag.New()
 
+    log.Error("%s", crashData)
     log.Crash(diag.AsString(diagData))
 
     panic(crashData)
