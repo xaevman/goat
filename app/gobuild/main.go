@@ -39,10 +39,6 @@ import (
 // File name to search for in the target path.
 const buildFileName = "BUILD"
 
-// Flag which specifies whether or not to install the build result for the
-// executing platform and architecture.
-var install = false
-
 // build represents a build node in the BUILD xml file.
 type build struct {
     Dir       string
