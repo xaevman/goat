@@ -30,15 +30,24 @@ import (
     "os"
     "os/exec"
     "path"
+    "path/filepath"
+    "runtime"
+    "strings"
     "time"
 )
 
 // File name to search for in the target path.
 const buildFileName = "BUILD"
 
+// Flag which specifies whether or not to install the build result for the
+// executing platform and architecture.
+var install = false
+
 // build represents a build node in the BUILD xml file.
 type build struct {
     Dir       string
+    Install   bool       `xml:"install,attr"`
+    Name      string
     Path      string
     Platforms []platform `xml:"Platform"`
 }
@@ -93,12 +102,15 @@ func main() {
             continue
         }
 
-        b := build{
-            Dir:  path.Dir(item),
-            Path: item,
+        b := &build {
+            Dir:     path.Dir(item),
+            Install: false,
+            Path:    item,
         }
 
-        xml.Unmarshal(buildData, &b)
+        resolveName(b)
+
+        xml.Unmarshal(buildData, b)
         goBuild(b, buildChan)
     }
 
@@ -111,9 +123,23 @@ func main() {
     )
 }
 
+// resolveName attempts to resolve the name of project directory. This name
+// is later used as the file name of the resulting binary.
+func resolveName(b *build) {
+    absPath, err := filepath.Abs(b.Dir)
+    if err != nil {
+        fmt.Printf("Can't resolve name for directory %s\n", b.Dir)
+        return
+    }
+
+    fileName := filepath.Base(absPath)
+    fmt.Printf("Resolved fileName = %s\n", fileName)
+    b.Name = fileName
+}
+
 // goBuild takes a given build and stars a separate go routine to build
 // each of the targetted platforms.
-func goBuild(b build, c chan bool) {
+func goBuild(b *build, c chan bool) {
     pChan := make(chan bool)
     for _, platform := range b.Platforms {
         go goBuildPlatform(b, platform, pChan)
@@ -126,10 +152,7 @@ func goBuild(b build, c chan bool) {
 
 // goBuildPlatform takes a given set of build settings and target platform
 // and executes to the build with those settings.
-func goBuildPlatform(b build, p platform, c chan bool) {
-    os.Setenv("GOOS", p.OS)
-    os.Setenv("GOARCH", p.Arch)
-
+func goBuildPlatform(b *build, p platform, c chan bool) {
     fmt.Printf(
         "Starting build %v (%v-%v)\n",
         b.Dir,
@@ -137,8 +160,22 @@ func goBuildPlatform(b build, p platform, c chan bool) {
         p.Arch,
     )
 
-    cmd         := exec.Command("go", "install")
+    // build paths
+    extension := ""
+    if p.OS == "windows" {
+        extension = ".exe"
+    }
+
+    gopath   := fmt.Sprintf("GOPATH=%s", os.Getenv("GOPATH"))
+    goos     := fmt.Sprintf("GOOS=%s", p.OS)
+    goarch   := fmt.Sprintf("GOARCH=%s", p.Arch)
+    destPath := fmt.Sprintf("bin/%s/%s", p.OS, p.Arch)
+    destFile := fmt.Sprintf("%s/%s%s", destPath, b.Name, extension)
+
+    // build
+    cmd         := exec.Command("go", "build", "-o", destFile)
     cmd.Dir      = b.Dir
+    cmd.Env      = []string { gopath, goos, goarch }
     start       := time.Now()
     output, err := cmd.CombinedOutput()
 
@@ -147,6 +184,23 @@ func goBuildPlatform(b build, p platform, c chan bool) {
         fmt.Printf("\t%v\n", string(output))
     }
 
+    // install if requested
+    if b.Install               == true &&
+       strings.ToLower(p.OS)   == runtime.GOOS &&
+       strings.ToLower(p.Arch) == runtime.GOARCH {
+        fmt.Printf("Installing %s-%s...\n", p.OS, p.Arch)
+        cmd         = exec.Command("go", "install")
+        cmd.Dir     = b.Dir
+        start       = time.Now()
+        output, err = cmd.CombinedOutput()
+
+        if err != nil {
+            fmt.Printf("Error installing %v (%v)\n", cmd.Path, err)
+            fmt.Printf("\t%v\n", string(output))
+        }
+    }
+
+    // report completion
     fmt.Printf(
         "%v (%v-%v) complete\t%v\n",
         b.Dir,
